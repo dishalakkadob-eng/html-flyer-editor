@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+ <html>
+<head>
+ <title>Flyer</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+<style>
+html, body {
+ margin: 0;
+padding: 0;
+background: transparent;
+}
+
+
+ .canvas-container {
+ position: relative;
+width: 1000px;
+ height: 1500px;
+overflow: hidden;
+background-color: transparent;
+ background-image: url('https://d3ertw8tsv1zr3.cloudfront.net/imageflyer/resource/harshil_602e068e194bf_bg_image_1613629070.jpg');
+background-size: cover;
+background-position: center;
+ }
+
+
+ .text-element { position: absolute;
+ white-space: normal;
+ overflow-wrap: normal;
+ word-break: normal; transform-origin: center;
+}
+
+.sticker-element {
+ position: absolute;
+transform-origin: center;
+}
+
+
+/* Font Faces */
+@font-face {
+ font-family: "Playball-Regular";
+src: url("https://d3ertw8tsv1zr3.cloudfront.net/imageflyer/fonts/playball.ttf") format("truetype");
+ }
+@font-face {
+ font-family: "Montserrat-Medium";
+ src: url("https://d3ertw8tsv1zr3.cloudfront.net/imageflyer/fonts/Montserrat-Medium.otf") format("opentype"); }
+ @font-face {
+font-family: "Trueno";
+src: url("https://d3ertw8tsv1zr3.cloudfront.net/imageflyer/fonts/trueno_rg.otf") format("opentype");
+}
+ @font-face {
+font-family: "TruenoLt";
+ src: url("https://d3ertw8tsv1zr3.cloudfront.net/imageflyer/fonts/trueno_lt.otf") format("opentype");
+ }
+</style>
+ </head>
+ <body>
+<div class="canvas-container">
+
+<!-- Hero Graphic -->
+<img class="sticker-element" src="https://d3ertw8tsv1zr3.cloudfront.net/imageflyer/resource/harshil_602e068e5c0d9_sticker_image_16136290701.png" style="left: 338px; top: 68.7px; width: 324px; height: 322px; z-index: 1;" alt="" aria-hidden="true" />
+
+ <!-- Headline Box -->
+<div class="text-element" style="left: 0; top: 380px; width: 1000px; text-align: center; z-index: 1000; display: flex; flex-direction: column; align-items: center; gap: 10px;">
+ <div style="font-family: Playball-Regular; font-size: 221px; color: #000000; text-shadow: -2px -2px 0 #FFFFFF, 2px -2px 0 #FFFFFF, -2px 2px 0 #FFFFFF, 2px 2px 0 #FFFFFF; line-height: 0.9;">
+<span>Baseball</span>
+</div>
+ <div style="font-family: Playball-Regular; font-size: 140px; color: #000000; text-shadow: -2px -2px 0 #FFFFFF, 2px -2px 0 #FFFFFF, -2px 2px 0 #FFFFFF, 2px 2px 0 #FFFFFF; line-height: 0.9;">
+ <span>Tryouts</span>
+</div>
+ </div>
+
+
+<!-- Highlight Box (Frame + Text) -->
+<div class="text-element" style="left: 259.5px; top: 790px; width: 481px; height: 83px; display: flex; align-items: center; justify-content: center; z-index: 1000;">
+<img class="sticker-element" src="https://d3ertw8tsv1zr3.cloudfront.net/imageflyer/resource/harshil_602e068e8cda7_sticker_image_16136290702.png" style="left: 0; top: 0; width: 100%; height: 100%; z-index: 1;" alt="" aria-hidden="true" />
+ <div style="position: relative; z-index: 1000; font-family: Montserrat-Medium; font-size: 49px; color: #000000; text-shadow: -1.5px -1.5px 0 #FFFFFF, 1.5px -1.5px 0 #FFFFFF, -1.5px 1.5px 0 #FFFFFF, 1.5px 1.5px 0 #FFFFFF; text-align: center;">
+ <span>8U TEAM</span>
+</div>
+</div>
+
+ <!-- Body Copy Box --> <div class="text-element" style="left: 100px; top: 920px; width: 800px; text-align: center; z-index: 1000;">
+ <div style="font-family: TruenoLt; font-size: 30px; color: #FFFFFF; text-shadow: 2px 2px 4px #000000; line-height: 1.4;"> <span>Join us for the upcoming season. We are looking for talented players to join our competitive 8U roster. Registration is open now.</span>
+ </div>
+ </div>
+
+
+ <div class="text-element" style="left: 0; top: 1080px; width: 1000px; text-align: center; z-index: 1000; display: flex; flex-direction: column; gap: 15px;">
+ <div style="font-family: Trueno; font-size: 34px; color: #FFFFFF; text-shadow: 2px 2px 4px #000000;">
+ <span>- For More Information -</span>
+</div>
+ <div style="font-family: TruenoLt; font-size: 39px; color: #FFFFFF; text-shadow: 2px 2px 4px #000000;">
+ <span>Call On : +0 123 456 789</span>
+ </div>
+ <div style="font-family: TruenoLt; font-size: 39px; color: #FFFFFF; text-shadow: 2px 2px 4px #000000;">
+ <span>www.yourwebsitename.com</span>
+</div>
+ </div>
+
+
+<!-- Social Icons Box -->
+ <div class="text-element" style="left: 0; top: 1280px; width: 1000px; display: flex; justify-content: center; gap: 25px; z-index: 1000; color: #FFFFFF; text-shadow: 2px 2px 4px #000000;">
+<div class="fa-wrap" style="font-size:43px; line-height:1;">
+ <span class="fa-brands fa-twitter"></span>
+</div>
+<div class="fa-wrap" style="font-size:43px; line-height:1;">
+ <span class="fa-brands fa-facebook"></span>
+</div>
+ <div class="fa-wrap" style="font-size:43px; line-height:1;">
+ <span class="fa-brands fa-instagram"></span>
+</div>
+ </div>
+
+ <!-- Footer Graphic -->
+<img class="sticker-element" src="https://d3ertw8tsv1zr3.cloudfront.net/imageflyer/resource/harshil_602e068e4055b_sticker_image_16136290700.png" style="left: 241.5px; top: 1380.3px; width: 517px; height: 51px; z-index: 1;" alt="" aria-hidden="true" />
+
+ </div>
+ </body>
+ </html>
