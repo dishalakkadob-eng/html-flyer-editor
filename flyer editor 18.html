@@ -417,6 +417,107 @@
             user-select: none; /* Prevent text selection blue highlights on drag */
         }
 
+        @media (max-width: 768px) {
+            body, html {
+                height: 100dvh; /* Uses dynamic viewport to prevent address bar jumping */
+            }
+
+            /* 1. Make Toolbar Horizontally Scrollable */
+            .toolbar {
+                overflow-x: auto;
+                flex-wrap: nowrap;
+                padding: 0 10px;
+                -webkit-overflow-scrolling: touch; /* Smooth scrolling on iOS */
+                scrollbar-width: none; /* Hide scrollbar Firefox */
+            }
+            .toolbar::-webkit-scrollbar {
+                display: none; /* Hide scrollbar Chrome/Safari */
+            }
+            .toolbar-group {
+                flex-shrink: 0; /* Prevent buttons from crushing together */
+            }
+
+            /* 2. Stack the Layout Vertically */
+            .main-editor {
+                flex-direction: column;
+                height: calc(100dvh - var(--toolbar-h));
+            }
+
+            /* 3. Canvas gets the top area */
+            .canvas-wrapper {
+                flex: 1;
+                min-height: 50dvh;
+                /* CRITICAL: Prevents pull-to-refresh and screen scrolling when dragging elements */
+                touch-action: none; 
+                /* This tells the phone: "Do not scroll the webpage when I touch here" */
+                touch-action: pinch-zoom !important; 
+                
+                /* This ensures that clicks are immediately registered by JS, not delayed */
+                -webkit-tap-highlight-color: transparent;
+            }
+
+            /* 4. Properties panel becomes a bottom sheet */
+            .properties-panel {
+                width: 100%;
+                height: 35dvh; /* Takes bottom 40% of screen */
+                border-left: none;
+                border-top: 1px solid var(--border);
+                
+                /* Accounts for iPhone/Android bottom gesture bars */
+                padding-bottom: calc(15px + env(safe-area-inset-bottom)); 
+            }
+
+            /* 5. Two-column grids for mobile inputs */
+            .control-row {
+                flex-wrap: wrap;
+            }
+            .control-row > div {
+                min-width: 45%; 
+            }
+
+            /* 6. Fix Modals for small screens */
+            .modal-content {
+                width: 95%;
+                margin: 10px;
+                max-height: 90dvh;
+                display: flex;
+                flex-direction: column;
+            }
+            .modal-body {
+                overflow-y: auto;
+            }
+            /* 1. Visually increase the handle size slightly so users can see them when zoomed out */
+            .handle, .rotate-handle {
+                width: 18px !important;
+                height: 18px !important;
+            }
+
+            /* 2. Adjust the centering math so the new 18px size stays perfectly on the borders */
+            .handle[data-dir="nw"] { top: -9px !important; left: -9px !important; }
+            .handle[data-dir="n"] { top: -9px !important; left: calc(50% - 9px) !important; }
+            .handle[data-dir="ne"] { top: -9px !important; right: -9px !important; }
+            .handle[data-dir="e"] { top: calc(50% - 9px) !important; right: -9px !important; }
+            .handle[data-dir="se"] { bottom: -9px !important; right: -9px !important; }
+            .handle[data-dir="s"] { bottom: -9px !important; left: calc(50% - 9px) !important; }
+            .handle[data-dir="sw"] { bottom: -9px !important; left: -9px !important; }
+            .handle[data-dir="w"] { top: calc(50% - 9px) !important; left: -9px !important; }
+
+            .rotate-handle { top: -45px !important; left: calc(50% - 9px) !important; }
+            .rotate-line { top: -37px !important; height: 37px !important; }
+
+            /* 3. CRITICAL: Add a massive 40x40 invisible touch-zone around every handle */
+            .handle::after, .rotate-handle::after {
+                content: '';
+                position: absolute;
+                /* Expands the clickable area 20px outwards in every direction */
+                top: -20px;
+                left: -20px;
+                right: -20px;
+                bottom: -20px;
+                background: transparent; /* Remains entirely invisible */
+            }
+        }
+
         /* Print Output / PDF Generating Mode */
         @media print {
 
@@ -655,6 +756,12 @@
     </div>
 
     <script>
+        if (!window.crypto) window.crypto = {};
+        if (!window.crypto.randomUUID) {
+            window.crypto.randomUUID = function() {
+                return Date.now().toString(36) + '-' + Math.random().toString(36).substring(2);
+            };
+        }
        // State Management
         const state = {
             elements: [],
@@ -692,6 +799,25 @@
                 return doc.body.innerHTML;
             }
         };
+
+        function autoFitMobile() {
+            if (window.innerWidth <= 768) {
+                const wrapper = document.getElementById('canvas-wrapper');
+                const rect = wrapper.getBoundingClientRect();
+                
+                // Scale to fit width, leaving 40px of breathing room
+                const scaleX = (rect.width - 40) / state.canvasW;
+                const scaleY = (rect.height - 40) / state.canvasH;
+                
+                state.zoom = Math.min(scaleX, scaleY, 1); 
+                state.panX = 0;
+                state.panY = 0;
+                
+                d_scale.style.transform = `scale(${state.zoom})`;
+                d_pan.style.transform = `translate(0,0px)`;
+                document.getElementById('zoom-text').innerText = Math.round(state.zoom * 100) + '%';
+            }
+        }
 
         // --- History ---
         function saveHistory() {
@@ -839,7 +965,7 @@
         
         let lastClickTime = 0;
 
-        document.getElementById('canvas-wrapper').addEventListener('mousedown', e => {
+        document.getElementById('canvas-wrapper').addEventListener('pointerdown', e => {
             // If we click inside an actively editing text box, let the browser handle typing naturally
             const elNode = e.target.closest('.canvas-element');
             if (elNode && state.editingId === elNode.id.replace('el-', '')) return; 
@@ -896,7 +1022,7 @@
             selectElement(null);
         });
 
-        window.addEventListener('mousemove', e => {
+        window.addEventListener('pointermove', e => {
             if (!dragMode || !dragStartObj) return;
             const el = getSelectedElement();
             const rect = canvasEl.getBoundingClientRect();
@@ -908,9 +1034,6 @@
                 el.y = dragStartObj.y + (my - dragStartY);
                 if (state.grid) { el.x = Math.round(el.x / 20) * 20; el.y = Math.round(el.y / 20) * 20; }
             } else if (dragMode === 'rotate') {
-                // const cx = el.x + el.w / 2, cy = el.y + el.h / 2;
-                // el.angle = Math.atan2(my - cy, mx - cx) * 180 / Math.PI + 90;
-                // if (e.shiftKey) el.angle = Math.round(el.angle / 15) * 15;
 
                 const cx = el.x + el.w / 2, cy = el.y + el.h / 2;
                 let newAngle = Math.atan2(my - cy, mx - cx) * 180 / Math.PI + 90;
@@ -942,20 +1065,37 @@
 
                 let w = dragStartObj.w, h = dragStartObj.h, x = dragStartObj.x, y = dragStartObj.y;
                     
-                const isSideHandle = ['e', 'w'].includes(dragMode);
+                // const isSideHandle = ['e', 'w'].includes(dragMode);
+                const isSideHandle = ['e', 'w', 'n', 's'].includes(dragMode);
                 const isCornerHandle = ['nw', 'ne', 'se', 'sw'].includes(dragMode);
 
                 if (isSideHandle) {
                     // --- NEW CHANGE: Apply the min-width lock ONLY to side-resizing to preserve autowrapping ---
                     const MIN_W = dragStartObj.minWidth || 30;
+                    const MIN_H = 30;
                     if (dragMode === 'e') w = Math.max(MIN_W, u_mx - dragStartObj.x);
                     if (dragMode === 'w') { 
                         const r = dragStartObj.x + dragStartObj.w; 
                         w = Math.max(MIN_W, r - u_mx); 
                         x = r - w; 
                     }
+                    if (dragMode === 's') h = Math.max(MIN_H, u_my - dragStartObj.y);
+                    if (dragMode === 'n') {
+                        const b = dragStartObj.y + dragStartObj.h;
+                        h = Math.max(MIN_H, b - u_my);
+                        y = b - h;
+                    }
                     // --- NEW FIX: Dynamically measure text wrap height for Side Handles ---
-                    if (el.type === 'text') {
+                    // if (el.type === 'text') {
+                    //     const node = document.getElementById('el-' + el.id);
+                    //     if (node) {
+                    //         const oldW = node.style.width;
+                    //         node.style.width = w + 'px';
+                    //         h = node.scrollHeight; // Grab exact height after word wrap
+                    //         node.style.width = oldW;
+                    //     }
+                    // }
+                    if (el.type === 'text' && ['e', 'w'].includes(dragMode)) {
                         const node = document.getElementById('el-' + el.id);
                         if (node) {
                             const oldW = node.style.width;
@@ -1028,7 +1168,7 @@
         });
 
         // ISSUE 3 FIX: Wait until mouseup to check if it was just a "click" and not a "drag"
-        window.addEventListener('mouseup', (e) => { 
+        window.addEventListener('pointerup', (e) => { 
             if (dragMode) { 
                 if (dragMode === 'move') {
                     const dx = Math.abs(e.clientX - window.__clickPos.x);
@@ -1194,19 +1334,77 @@
         }
 
         // --- Adding Elements ---
+        // NEW FIX: Calculates exactly where the user is looking on screen
+        function getVisibleCenter() {
+            const wrapper = document.getElementById('canvas-wrapper');
+            const rect = wrapper.getBoundingClientRect();
+            // Adjust the exact center of the screen based on zoom and pan
+            const centerX = ((rect.width / 2) - state.panX) / state.zoom;
+            const centerY = ((rect.height / 2) - state.panY) / state.zoom;
+            return { x: centerX, y: centerY };
+        }
         function addText() {
-            const el = { id: crypto.randomUUID(), type: 'text', content: 'Edit me', x: state.canvasW / 2 - 75, y: state.canvasH / 2 - 20, w: 150, h: 40, angle: 0, opacity: 1, zIndex: state.elements.length, fontSize: 28, fontFamily: 'Inter', color: '#000000', bold: false, italic: false, underline: false, textAlign: 'center', lineHeight: 1.2, letterSpacing: 0, bgColor: 'transparent', radius: 0 };
-            state.elements.push(el); selectElement(el.id); saveHistory(); enterTextEditMode(el.id);
+            // const el = { id: crypto.randomUUID(), type: 'text', content: 'Edit me', x: state.canvasW / 2 - 75, y: state.canvasH / 2 - 20, w: 150, h: 40, angle: 0, opacity: 1, zIndex: state.elements.length, fontSize: 28, fontFamily: 'Inter', color: '#000000', bold: false, italic: false, underline: false, textAlign: 'center', lineHeight: 1.2, letterSpacing: 0, bgColor: 'transparent', radius: 0 };
+            // state.elements.push(el); selectElement(el.id); saveHistory(); enterTextEditMode(el.id);
+            const center = getVisibleCenter(); // Drops exactly in the middle of your screen
+            
+            const el = { 
+                id: crypto.randomUUID(), type: 'text', content: 'Edit me', 
+                // x: center.x - 75, y: center.y - 20, // Use smart coordinates
+                x: state.canvasW / 2 - 75, // Centers a 150px wide box
+                y: state.canvasH / 2 - 20,
+                w: 150, h: 40, angle: 0, opacity: 1, zIndex: state.elements.length, 
+                fontSize: 28, fontFamily: 'Inter', color: '#000000', bold: false, 
+                italic: false, underline: false, textAlign: 'center', lineHeight: 1.2, 
+                letterSpacing: 0, bgColor: 'transparent', radius: 0 
+            };
+            
+            state.elements.push(el); 
+            selectElement(el.id); 
+            saveHistory(); 
+            
+            // Auto-edit can break mobile keyboards, so we only auto-edit on Desktop
+            if (window.innerWidth > 768) {
+                enterTextEditMode(el.id);
+            }
         }
         function addImageFile(input) {
-            if (!input.files.length) return; const reader = new FileReader();
+            // if (!input.files.length) return; const reader = new FileReader();
+            // reader.onload = e => {
+            //     const img = new Image();img.crossOrigin = "Anonymous"; img.onload = () => {
+            //         const ratio = img.height / img.width; const w = Math.min(img.width, 300); const h = w * ratio;
+            //         const el = { id: crypto.randomUUID(), type: 'image', content: e.target.result, x: state.canvasW / 2 - w / 2, y: state.canvasH / 2 - h / 2, w, h, angle: 0, opacity: 1, zIndex: state.elements.length, radius: 0, filters: { b: 0, c: 0, s: 0, bl: 0 }, shadow: { c: '#000000', bl: 0, x: 0, y: 0 } };
+            //         state.elements.push(el); selectElement(el.id); saveHistory();
+            //     }; img.src = e.target.result;
+            // }; reader.readAsDataURL(input.files[0]); input.value = '';
+            if (!input.files.length) return; 
+            const reader = new FileReader();
             reader.onload = e => {
-                const img = new Image();img.crossOrigin = "Anonymous"; img.onload = () => {
-                    const ratio = img.height / img.width; const w = Math.min(img.width, 300); const h = w * ratio;
-                    const el = { id: crypto.randomUUID(), type: 'image', content: e.target.result, x: state.canvasW / 2 - w / 2, y: state.canvasH / 2 - h / 2, w, h, angle: 0, opacity: 1, zIndex: state.elements.length, radius: 0, filters: { b: 0, c: 0, s: 0, bl: 0 }, shadow: { c: '#000000', bl: 0, x: 0, y: 0 } };
-                    state.elements.push(el); selectElement(el.id); saveHistory();
-                }; img.src = e.target.result;
-            }; reader.readAsDataURL(input.files[0]); input.value = '';
+                const img = new Image();
+                img.crossOrigin = "Anonymous"; 
+                img.onload = () => {
+                    const ratio = img.height / img.width; 
+                    const w = Math.min(img.width, state.canvasW * 0.5, 300); // Caps image at 50% flyer width
+                    const h = w * ratio;
+                    
+                    const center = getVisibleCenter(); // Drops exactly in the middle of your screen
+                    
+                    const el = { 
+                        id: crypto.randomUUID(), type: 'image', content: e.target.result, 
+                        x: state.canvasW / 2 - w / 2, // Perfect Center
+                        y: state.canvasH / 2 - h / 2, // Perfect Center
+                        w, h, angle: 0, opacity: 1, zIndex: state.elements.length, 
+                        radius: 0, filters: { b: 0, c: 0, s: 0, bl: 0 }, shadow: { c: '#000000', bl: 0, x: 0, y: 0 } 
+                    };
+                    
+                    state.elements.push(el); 
+                    selectElement(el.id); 
+                    saveHistory();
+                }; 
+                img.src = e.target.result;
+            }; 
+            reader.readAsDataURL(input.files[0]); 
+            input.value = '';
         }
         function replaceImageFile(input) {
             const el = getSelectedElement(); if (!el || el.type !== 'image' || !input.files.length) return;
@@ -1563,7 +1761,8 @@ function exportToPDF() {
     img.src = url;
 }
         
-
+window.addEventListener('load', autoFitMobile);
+        window.addEventListener('resize', autoFitMobile);
 
     </script>
 </body>
