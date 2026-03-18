@@ -9,7 +9,465 @@
 
     <style>
         /* CSS Reset & Vanilla Premium UI Theme */
-       :root{--primary:#41439c;--primary-hover:#4f46e5;--bg-dark:#0f172a;--bg-panel:#1e293b;--bg-canvas:#e2e8f0;--text-main:#f8fafc;--text-muted:#94a3b8;--border:#334155;--toolbar-h:60px;--panel-width:320px}body,html{margin:0;padding:0;width:100%;height:100vh;font-family:'Inter',system-ui,sans-serif;background:var(--bg-dark);color:var(--text-main);overflow:hidden;display:flex;flex-direction:column}.toolbar{height:var(--toolbar-h);background:var(--bg-panel);border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;padding:0 15px;z-index:10}.toolbar-group{display:flex;gap:8px;align-items:center}.toolbar-group:not(:last-child){border-right:1px solid var(--border);padding-right:15px}button{background:#fff0;border:1px solid var(--border);color:var(--text-main);padding:8px 12px;border-radius:6px;cursor:pointer;transition:all 0.2s;font-size:13px;font-weight:500}button:hover{background:rgb(255 255 255 / .05)}button.primary{background:var(--primary);border-color:var(--primary);color:#ffffff}button.primary:hover{background:var(--primary-hover)}button:disabled{opacity:.4;cursor:not-allowed}button.active{background:var(--primary-hover);border-color:var(--primary-hover);color:#fff}.btn-danger{color:#f87171;border-color:#f87171}.btn-danger:hover{background:rgb(248 113 113 / .1)}span.zoom-level{font-size:13px;color:var(--text-muted);width:45px;text-align:center}.main-editor{display:flex;flex:1;height:calc(100vh - var(--toolbar-h))}.canvas-wrapper{flex:1;background:var(--bg-canvas);overflow:hidden;position:relative;display:flex;align-items:center;justify-content:center}#canvas-scale{transition:transform 0.05s linear;transform-origin:center}#flyer-canvas{position:relative;overflow:hidden;box-shadow:0 10px 40px rgb(0 0 0 / .25);background:#fff;transform-origin:top left}.canvas-element{position:absolute;transform-origin:center;box-sizing:border-box;cursor:move}#selection-overlay{position:absolute;border:1.5px solid var(--primary-hover);pointer-events:none;z-index:99999;display:none}.handle,.rotate-handle{position:absolute;width:10px;height:10px;background:#fff;border:1.5px solid var(--primary-hover);border-radius:50%;pointer-events:auto;z-index:10}.handle[data-dir="nw"]{cursor:nwse-resize;top:-6px;left:-6px}.handle[data-dir="n"]{cursor:ns-resize;top:-6px;left:calc(50% - 6px)}.handle[data-dir="ne"]{cursor:nesw-resize;top:-6px;right:-6px}.handle[data-dir="e"]{cursor:ew-resize;top:calc(50% - 6px);right:-6px}.handle[data-dir="se"]{cursor:nwse-resize;bottom:-6px;right:-6px}.handle[data-dir="s"]{cursor:ns-resize;bottom:-6px;left:calc(50% - 6px)}.handle[data-dir="sw"]{cursor:nesw-resize;bottom:-6px;left:-6px}.handle[data-dir="w"]{cursor:ew-resize;top:calc(50% - 6px);left:-6px}.rotate-handle{cursor:crosshair;background:var(--primary-hover);top:-35px;left:calc(50% - 6px)}.rotate-line{position:absolute;width:1.5px;height:29px;background:var(--primary-hover);top:-29px;left:calc(50% - 0.75px);pointer-events:none}.properties-panel{width:var(--panel-width);background:var(--bg-panel);border-left:1px solid var(--border);display:flex;flex-direction:column;overflow-y:auto;overflow-x:hidden}.panel-section{padding:15px 20px;border-bottom:1px solid var(--border);display:none}.panel-section.visible{display:block}.panel-section h3{margin:0 0 15px 0;font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:var(--text-muted)}.control-group{margin-bottom:12px}.control-row{display:flex;gap:10px;align-items:center}.control-row>div{flex:1}label{display:block;font-size:11px;color:var(--text-muted);margin-bottom:4px}input[type="number"],input[type="text"],select{width:100%;background:var(--bg-dark);border:1px solid var(--border);color:var(--text-main);padding:8px;border-radius:4px;box-sizing:border-box;font-size:13px;outline:none;transition:border-color 0.2s}input[type="color"]{width:100%;height:32px;padding:2px;background:var(--bg-dark);border:1px solid var(--border);border-radius:4px;cursor:pointer}input[type="range"]{width:100%;cursor:pointer}input[type="checkbox"]{accent-color:var(--primary)}.empty-state{padding:50px 20px;text-align:center;color:var(--text-muted);font-size:14px;display:block}.btn-group{display:flex;gap:5px}.btn-group button{flex:1;padding:6px}.modal-overlay{position:fixed;inset:0;background:rgb(0 0 0 / .7);display:none;align-items:center;justify-content:center;z-index:1000;backdrop-filter:blur(3px)}.modal-content{background:var(--bg-panel);width:600px;max-width:90%;border-radius:8px;box-shadow:0 20px 25px -5px rgb(0 0 0 / .5);border:1px solid var(--border)}.modal-header{padding:15px 20px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center}.modal-header h2{margin:0;font-size:16px}.modal-body{padding:20px}.modal-footer{padding:15px 20px;border-top:1px solid var(--border);display:flex;justify-content:flex-end;gap:10px;background:rgb(0 0 0 / .2)}textarea.code-input{width:100%;height:250px;background:var(--bg-dark);color:#a5b4fc;border:1px solid var(--border);padding:10px;font-family:monospace;border-radius:4px;resize:none;box-sizing:border-box;font-size:13px;outline:none}#selection-overlay[data-selected-type="text"] .handle[data-dir="n"],#selection-overlay[data-selected-type="text"] .handle[data-dir="s"]{display:none!important}#selection-overlay[data-selected-type="image"] .handle,#selection-overlay[data-selected-type="shape"] .handle{display:block}.canvas-element{position:absolute;transform-origin:center;box-sizing:border-box;cursor:move;outline:none;user-select:none}@media print{.toolbar,.properties-panel,.modal-overlay,#selection-overlay{display:none!important}body,html{margin:0;padding:0;background:#fff0;overflow:visible;width:100%;height:100%}.main-editor{display:block;height:auto}.canvas-wrapper{display:block;background:#fff0;overflow:visible;align-items:flex-start;justify-content:flex-start}#canvas-scale,#canvas-pan{transform:none!important}#flyer-canvas{box-shadow:none;margin:0;transform:none!important;background-image:none!important}@page{margin:0}}
+        :root {
+            --primary: #6366f1;
+            --primary-hover: #4f46e5;
+            --bg-dark: #0f172a;
+            --bg-panel: #1e293b;
+            --bg-canvas: #e2e8f0;
+            --text-main: #f8fafc;
+            --text-muted: #94a3b8;
+            --border: #334155;
+            --toolbar-h: 60px;
+            --panel-width: 320px;
+        }
+
+        body,
+        html {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100vh;
+            font-family: 'Inter', system-ui, sans-serif;
+            background: var(--bg-dark);
+            color: var(--text-main);
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* --- Toolbar --- */
+        .toolbar {
+            height: var(--toolbar-h);
+            background: var(--bg-panel);
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 15px;
+            z-index: 10;
+        }
+
+        .toolbar-group {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+        }
+
+        .toolbar-group:not(:last-child) {
+            border-right: 1px solid var(--border);
+            padding-right: 15px;
+        }
+
+        button {
+            background: transparent;
+            border: 1px solid var(--border);
+            color: var(--text-main);
+            padding: 8px 12px;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.2s;
+            font-size: 13px;
+            font-weight: 500;
+        }
+
+        button:hover {
+            background: rgba(255, 255, 255, 0.05);
+        }
+
+        button.primary {
+            background: var(--primary);
+            border-color: var(--primary);
+            color: white;
+        }
+
+        button.primary:hover {
+            background: var(--primary-hover);
+        }
+
+        button:disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+        }
+
+        button.active {
+            background: var(--primary-hover);
+            border-color: var(--primary-hover);
+            color: white;
+        }
+
+        .btn-danger {
+            color: #f87171;
+            border-color: #f87171;
+        }
+
+        .btn-danger:hover {
+            background: rgba(248, 113, 113, 0.1);
+        }
+
+        span.zoom-level {
+            font-size: 13px;
+            color: var(--text-muted);
+            width: 45px;
+            text-align: center;
+        }
+
+        /* --- Main Layout --- */
+        .main-editor {
+            display: flex;
+            flex: 1;
+            height: calc(100vh - var(--toolbar-h));
+        }
+
+        .canvas-wrapper {
+            flex: 1;
+            background: var(--bg-canvas);
+            overflow: hidden;
+            position: relative;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        #canvas-scale {
+            transition: transform 0.05s linear;
+            transform-origin: center;
+        }
+
+        #flyer-canvas {
+            position: relative;
+            overflow: hidden;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.25);
+            background: #ffffff;
+            transform-origin: top left;
+        }
+
+        .canvas-element {
+            position: absolute;
+            transform-origin: center;
+            box-sizing: border-box;
+            cursor: move;
+        }
+
+        /* Selection Box */
+        #selection-overlay {
+            position: absolute;
+            border: 1.5px solid var(--primary-hover);
+            pointer-events: none;
+            z-index: 99999;
+            display: none;
+        }
+
+        .handle,
+        .rotate-handle {
+            position: absolute;
+            width: 10px;
+            height: 10px;
+            background: white;
+            border: 1.5px solid var(--primary-hover);
+            border-radius: 50%;
+            pointer-events: auto;
+            z-index: 10;
+        }
+
+        .handle[data-dir="nw"] {
+            cursor: nwse-resize;
+            top: -6px;
+            left: -6px;
+        }
+
+        .handle[data-dir="n"] {
+            cursor: ns-resize;
+            top: -6px;
+            left: calc(50% - 6px);
+        }
+
+        .handle[data-dir="ne"] {
+            cursor: nesw-resize;
+            top: -6px;
+            right: -6px;
+        }
+
+        .handle[data-dir="e"] {
+            cursor: ew-resize;
+            top: calc(50% - 6px);
+            right: -6px;
+        }
+
+        .handle[data-dir="se"] {
+            cursor: nwse-resize;
+            bottom: -6px;
+            right: -6px;
+        }
+
+        .handle[data-dir="s"] {
+            cursor: ns-resize;
+            bottom: -6px;
+            left: calc(50% - 6px);
+        }
+
+        .handle[data-dir="sw"] {
+            cursor: nesw-resize;
+            bottom: -6px;
+            left: -6px;
+        }
+
+        .handle[data-dir="w"] {
+            cursor: ew-resize;
+            top: calc(50% - 6px);
+            left: -6px;
+        }
+
+        .rotate-handle {
+            cursor: crosshair;
+            background: var(--primary-hover);
+            top: -35px;
+            left: calc(50% - 6px);
+        }
+
+        .rotate-line {
+            position: absolute;
+            width: 1.5px;
+            height: 29px;
+            background: var(--primary-hover);
+            top: -29px;
+            left: calc(50% - 0.75px);
+            pointer-events: none;
+        }
+
+        /* Properties Panel */
+        .properties-panel {
+            width: var(--panel-width);
+            background: var(--bg-panel);
+            border-left: 1px solid var(--border);
+            display: flex;
+            flex-direction: column;
+            overflow-y: auto;
+            overflow-x: hidden;
+        }
+
+        .panel-section {
+            padding: 15px 20px;
+            border-bottom: 1px solid var(--border);
+            display: none;
+        }
+
+        .panel-section.visible {
+            display: block;
+        }
+
+        .panel-section h3 {
+            margin: 0 0 15px 0;
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: var(--text-muted);
+        }
+
+        .control-group {
+            margin-bottom: 12px;
+        }
+
+        .control-row {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+
+        .control-row>div {
+            flex: 1;
+        }
+
+        label {
+            display: block;
+            font-size: 11px;
+            color: var(--text-muted);
+            margin-bottom: 4px;
+        }
+
+        input[type="number"],
+        input[type="text"],
+        select {
+            width: 100%;
+            background: var(--bg-dark);
+            border: 1px solid var(--border);
+            color: var(--text-main);
+            padding: 8px;
+            border-radius: 4px;
+            box-sizing: border-box;
+            font-size: 13px;
+            outline: none;
+            transition: border-color 0.2s;
+        }
+
+        input[type="color"] {
+            width: 100%;
+            height: 32px;
+            padding: 2px;
+            background: var(--bg-dark);
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            cursor: pointer;
+        }
+
+        input[type="range"] {
+            width: 100%;
+            cursor: pointer;
+        }
+
+        input[type="checkbox"] {
+            accent-color: var(--primary);
+        }
+
+        .empty-state {
+            padding: 50px 20px;
+            text-align: center;
+            color: var(--text-muted);
+            font-size: 14px;
+            display: block;
+        }
+
+        .btn-group {
+            display: flex;
+            gap: 5px;
+        }
+
+        .btn-group button {
+            flex: 1;
+            padding: 6px;
+        }
+
+        /* Modals */
+        .modal-overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.7);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+            backdrop-filter: blur(3px);
+        }
+
+        .modal-content {
+            background: var(--bg-panel);
+            width: 600px;
+            max-width: 90%;
+            border-radius: 8px;
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5);
+            border: 1px solid var(--border);
+        }
+
+        .modal-header {
+            padding: 15px 20px;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .modal-header h2 {
+            margin: 0;
+            font-size: 16px;
+        }
+
+        .modal-body {
+            padding: 20px;
+        }
+
+        .modal-footer {
+            padding: 15px 20px;
+            border-top: 1px solid var(--border);
+            display: flex;
+            justify-content: flex-end;
+            gap: 10px;
+            background: rgba(0, 0, 0, 0.2);
+        }
+
+        textarea.code-input {
+            width: 100%;
+            height: 250px;
+            background: var(--bg-dark);
+            color: #a5b4fc;
+            border: 1px solid var(--border);
+            padding: 10px;
+            font-family: monospace;
+            border-radius: 4px;
+            resize: none;
+            box-sizing: border-box;
+            font-size: 13px;
+            outline: none;
+        }
+        #selection-overlay[data-selected-type="text"] .handle[data-dir="n"],
+        #selection-overlay[data-selected-type="text"] .handle[data-dir="s"] {
+            display: none !important;
+        }
+
+        /* Ensure they remain visible for images or shapes */
+        #selection-overlay[data-selected-type="image"] .handle,
+        #selection-overlay[data-selected-type="shape"] .handle {
+            display: block;
+        }
+        .canvas-element {
+            position: absolute;
+            transform-origin: center;
+            box-sizing: border-box;
+            cursor: move;
+            outline: none; /* Prevent browser default focus rings */
+            user-select: none; /* Prevent text selection blue highlights on drag */
+        }
+
+        /* Print Output / PDF Generating Mode */
+        @media print {
+
+            .toolbar,
+            .properties-panel,
+            .modal-overlay,
+            #selection-overlay {
+                display: none !important;
+            }
+
+            body,
+            html {
+                margin: 0;
+                padding: 0;
+                background: transparent;
+                overflow: visible;
+                width: 100%;
+                height: 100%;
+            }
+
+            .main-editor {
+                display: block;
+                height: auto;
+            }
+
+            .canvas-wrapper {
+                display: block;
+                background: transparent;
+                overflow: visible;
+                align-items: flex-start;
+                justify-content: flex-start;
+            }
+
+            #canvas-scale,
+            #canvas-pan {
+                transform: none !important;
+            }
+
+            #flyer-canvas {
+                box-shadow: none;
+                margin: 0;
+                transform: none !important;
+                background-image: none !important;
+            }
+
+            @page {
+                margin: 0;
+            }
+        }
+
+
     </style>
 </head>
 
@@ -450,9 +908,31 @@
                 el.y = dragStartObj.y + (my - dragStartY);
                 if (state.grid) { el.x = Math.round(el.x / 20) * 20; el.y = Math.round(el.y / 20) * 20; }
             } else if (dragMode === 'rotate') {
+                // const cx = el.x + el.w / 2, cy = el.y + el.h / 2;
+                // el.angle = Math.atan2(my - cy, mx - cx) * 180 / Math.PI + 90;
+                // if (e.shiftKey) el.angle = Math.round(el.angle / 15) * 15;
+
                 const cx = el.x + el.w / 2, cy = el.y + el.h / 2;
-                el.angle = Math.atan2(my - cy, mx - cx) * 180 / Math.PI + 90;
-                if (e.shiftKey) el.angle = Math.round(el.angle / 15) * 15;
+                let newAngle = Math.atan2(my - cy, mx - cx) * 180 / Math.PI + 90;
+                
+                // Normalize the angle to always be a positive number between 0 and 360
+                newAngle = (newAngle + 360) % 360;
+
+                if (e.shiftKey) {
+                    // Shift key locks rotation to 15-degree increments
+                    el.angle = Math.round(newAngle / 15) * 15;
+                } else {
+                    // --- NEW FIX: Magnetic Snap threshold (7 degrees) ---
+                    const nearestRightAngle = Math.round(newAngle / 90) * 90;
+                    
+                    if (Math.abs(newAngle - nearestRightAngle) <= 7) {
+                        // Snap exactly to 0, 90, 180, or 270
+                        el.angle = nearestRightAngle === 360 ? 0 : nearestRightAngle;
+                    } else {
+                        // Free rotation
+                        el.angle = newAngle;
+                    }
+                }
             } else {
                 const cx = dragStartObj.x + dragStartObj.w / 2;
                 const cy = dragStartObj.y + dragStartObj.h / 2;
@@ -474,27 +954,67 @@
                         w = Math.max(MIN_W, r - u_mx); 
                         x = r - w; 
                     }
+                    // --- NEW FIX: Dynamically measure text wrap height for Side Handles ---
+                    if (el.type === 'text') {
+                        const node = document.getElementById('el-' + el.id);
+                        if (node) {
+                            const oldW = node.style.width;
+                            node.style.width = w + 'px';
+                            h = node.scrollHeight; // Grab exact height after word wrap
+                            node.style.width = oldW;
+                        }
+                    }
                     // ---------------------------------------------------------------------------------------------
                 }
 
                 if (isCornerHandle) {
-                    let scaleFactor = 1;
-                    if (dragMode.includes('e')) scaleFactor = (u_mx - dragStartObj.x) / dragStartObj.w;
-                    else if (dragMode.includes('w')) scaleFactor = ((dragStartObj.x + dragStartObj.w) - u_mx) / dragStartObj.w;
+
+                    // --- NEW FIX: Diagonal Vector Projection for uniform scaling speed ---
+                    const dirX = dragMode.includes('e') ? 1 : -1;
+                    const dirY = dragMode.includes('s') ? 1 : -1;
+                    
+                    const pivotX = dragMode.includes('e') ? dragStartObj.x : dragStartObj.x + dragStartObj.w;
+                    const pivotY = dragMode.includes('s') ? dragStartObj.y : dragStartObj.y + dragStartObj.h;
+
+                    const vDiagX = dragStartObj.w * dirX;
+                    const vDiagY = dragStartObj.h * dirY;
+                    const vMouseX = u_mx - pivotX;
+                    const vMouseY = u_my - pivotY;
+
+                    // Calculate scale based on the total diagonal mass of the shape
+                    const dotProduct = (vMouseX * vDiagX) + (vMouseY * vDiagY);
+                    const diagLengthSq = (dragStartObj.w * dragStartObj.w) + (dragStartObj.h * dragStartObj.h);
+                    
+                    let scaleFactor = dotProduct / diagLengthSq;
 
                     // --- NEW CHANGE: Allow proportional corner scaling without being blocked by the static min-width ---
-                    scaleFactor = Math.max(0.2, scaleFactor); // Limit scaling down to 10% of original size so it doesn't flip
+                    scaleFactor = Math.max(0.2, scaleFactor); // Limit scaling down to 20% of original size so it doesn't flip
                     
+                    if (el.type === 'text') {
+                        const minScaleLimit = 8 / dragStartObj.fontSize;
+                        scaleFactor = Math.max(scaleFactor, minScaleLimit);
+                        el.fontSize = dragStartObj.fontSize * scaleFactor;
+                    }
+
                     w = dragStartObj.w * scaleFactor;
-                    h = dragStartObj.h * scaleFactor;
+
+                    if (el.type === 'text') {
+                        const node = document.getElementById('el-' + el.id);
+                        if (node) {
+                            const oldW = node.style.width;
+                            const oldF = node.style.fontSize;
+                            node.style.width = w + 'px';
+                            node.style.fontSize = el.fontSize + 'px';
+                            h = node.scrollHeight;
+                            node.style.width = oldW;
+                            node.style.fontSize = oldF;
+                        }
+                    } else {
+                        h = dragStartObj.h * scaleFactor;
+                    }
 
                     if (dragMode.includes('w')) x = dragStartObj.x + dragStartObj.w - w;
                     if (dragMode.includes('n')) y = dragStartObj.y + dragStartObj.h - h;
-
-                    if (el.type === 'text') 
-                    {
-                        el.fontSize = dragStartObj.fontSize * scaleFactor;
-                    }
                 }
 
                 const ux = x + w / 2, uy = y + h / 2;
