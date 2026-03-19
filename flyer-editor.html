@@ -459,7 +459,7 @@
             /* 4. Properties panel becomes a bottom sheet */
             .properties-panel {
                 width: 100%;
-                height: 35dvh; /* Takes bottom 40% of screen */
+                height: 35dvh; 
                 border-left: none;
                 border-top: 1px solid var(--border);
                 
@@ -905,7 +905,9 @@
                         }
                     });
                 } else if (el.type === 'image') {
-                    node.innerHTML = `<img src="${el.content}" draggable="false" style="width:100%; height:100%; display:block; object-fit:fill; border-radius:${el.radius}px; filter: brightness(${1 + el.filters.b}) contrast(${1 + el.filters.c}) saturate(${1 + el.filters.s}) blur(${el.filters.bl}px); box-shadow: ${el.shadow.x}px ${el.shadow.y}px ${el.shadow.bl}px ${el.shadow.c}; pointer-events:none;"/>`;
+                    // node.innerHTML = `<img src="${el.content}" draggable="false" style="width:100%; height:100%; display:block; object-fit:fill; border-radius:${el.radius}px; filter: brightness(${1 + el.filters.b}) contrast(${1 + el.filters.c}) saturate(${1 + el.filters.s}) blur(${el.filters.bl}px); box-shadow: ${el.shadow.x}px ${el.shadow.y}px ${el.shadow.bl}px ${el.shadow.c}; pointer-events:none;"/>`;
+                    const fit = el.objectFit || 'fill';
+                    node.innerHTML = `<img src="${el.content}" draggable="false" style="width:100%; height:100%; display:block; object-fit:${fit}; border-radius:${el.radius}px; filter: brightness(${1 + el.filters.b}) contrast(${1 + el.filters.c}) saturate(${1 + el.filters.s}) blur(${el.filters.bl}px); box-shadow: ${el.shadow.x}px ${el.shadow.y}px ${el.shadow.bl}px ${el.shadow.c}; pointer-events:none;"/>`;
                 } else if (el.type === 'svg') {
                     node.innerHTML = DOMSanitizer.sanitize(el.content);
                     const svg = node.querySelector('svg');
@@ -1065,7 +1067,6 @@
 
                 let w = dragStartObj.w, h = dragStartObj.h, x = dragStartObj.x, y = dragStartObj.y;
                     
-                // const isSideHandle = ['e', 'w'].includes(dragMode);
                 const isSideHandle = ['e', 'w', 'n', 's'].includes(dragMode);
                 const isCornerHandle = ['nw', 'ne', 'se', 'sw'].includes(dragMode);
 
@@ -1086,15 +1087,6 @@
                         y = b - h;
                     }
                     // --- NEW FIX: Dynamically measure text wrap height for Side Handles ---
-                    // if (el.type === 'text') {
-                    //     const node = document.getElementById('el-' + el.id);
-                    //     if (node) {
-                    //         const oldW = node.style.width;
-                    //         node.style.width = w + 'px';
-                    //         h = node.scrollHeight; // Grab exact height after word wrap
-                    //         node.style.width = oldW;
-                    //     }
-                    // }
                     if (el.type === 'text' && ['e', 'w'].includes(dragMode)) {
                         const node = document.getElementById('el-' + el.id);
                         if (node) {
@@ -1344,13 +1336,10 @@
             return { x: centerX, y: centerY };
         }
         function addText() {
-            // const el = { id: crypto.randomUUID(), type: 'text', content: 'Edit me', x: state.canvasW / 2 - 75, y: state.canvasH / 2 - 20, w: 150, h: 40, angle: 0, opacity: 1, zIndex: state.elements.length, fontSize: 28, fontFamily: 'Inter', color: '#000000', bold: false, italic: false, underline: false, textAlign: 'center', lineHeight: 1.2, letterSpacing: 0, bgColor: 'transparent', radius: 0 };
-            // state.elements.push(el); selectElement(el.id); saveHistory(); enterTextEditMode(el.id);
             const center = getVisibleCenter(); // Drops exactly in the middle of your screen
             
             const el = { 
                 id: crypto.randomUUID(), type: 'text', content: 'Edit me', 
-                // x: center.x - 75, y: center.y - 20, // Use smart coordinates
                 x: state.canvasW / 2 - 75, // Centers a 150px wide box
                 y: state.canvasH / 2 - 20,
                 w: 150, h: 40, angle: 0, opacity: 1, zIndex: state.elements.length, 
@@ -1367,16 +1356,9 @@
             if (window.innerWidth > 768) {
                 enterTextEditMode(el.id);
             }
+            
         }
         function addImageFile(input) {
-            // if (!input.files.length) return; const reader = new FileReader();
-            // reader.onload = e => {
-            //     const img = new Image();img.crossOrigin = "Anonymous"; img.onload = () => {
-            //         const ratio = img.height / img.width; const w = Math.min(img.width, 300); const h = w * ratio;
-            //         const el = { id: crypto.randomUUID(), type: 'image', content: e.target.result, x: state.canvasW / 2 - w / 2, y: state.canvasH / 2 - h / 2, w, h, angle: 0, opacity: 1, zIndex: state.elements.length, radius: 0, filters: { b: 0, c: 0, s: 0, bl: 0 }, shadow: { c: '#000000', bl: 0, x: 0, y: 0 } };
-            //         state.elements.push(el); selectElement(el.id); saveHistory();
-            //     }; img.src = e.target.result;
-            // }; reader.readAsDataURL(input.files[0]); input.value = '';
             if (!input.files.length) return; 
             const reader = new FileReader();
             reader.onload = e => {
@@ -1428,155 +1410,213 @@
         }
 
         async function parseHtmlIntoState(html) {
-            const container = document.createElement('div'); 
-            container.innerHTML = DOMSanitizer.sanitize(html);
-            
-            // FIX 1: Use opacity instead of visibility. This forces the browser to 
-            // actually paint the fonts and calculate their true pixel sizes.
-            container.style.position = 'absolute'; 
-            container.style.opacity = '0.001'; 
-            container.style.pointerEvents = 'none';
-            container.style.top = '0px'; 
-            container.style.left = '0px';
-            container.style.width = '1200px'; 
-            document.body.appendChild(container);
+    const doc = new DOMParser().parseFromString(html, 'text/html');
+    
+    // Inject external styles and fonts
+    doc.querySelectorAll('link[rel="stylesheet"], link[href*="font"]').forEach(link => {
+        if (!document.querySelector(`link[href="${link.href}"]`)) {
+            const newLink = document.createElement('link');
+            newLink.rel = 'stylesheet';
+            newLink.href = link.href;
+            document.head.appendChild(newLink);
+        }
+    });
 
-            // INJECT FONTS
-            const fontUrls = new Set();
-            container.querySelectorAll('[data-font-url]').forEach(el => fontUrls.add(el.getAttribute('data-font-url')));
-            
-            const fontPromises = Array.from(fontUrls).map(url => {
-                return new Promise(resolve => {
-                    if (document.querySelector(`link[href="${url}"]`)) return resolve();
-                    const link = document.createElement('link');
-                    link.rel = 'stylesheet'; 
-                    link.href = url;
-                    link.onload = resolve; 
-                    link.onerror = resolve; 
-                    document.head.appendChild(link);
-                });
-            });
-            
-            await Promise.all(fontPromises);
-            await document.fonts.ready; 
-            await new Promise(r => setTimeout(r, 600)); // Crucial buffer for font painting
+    doc.querySelectorAll('style').forEach(style => {
+        const newStyle = document.createElement('style');
+        newStyle.innerHTML = style.innerHTML;
+        document.head.appendChild(newStyle);
+    });
 
-            const root = container.firstElementChild || container; 
-            const rs = window.getComputedStyle(root);
-            state.canvasW = parseFloat(rs.width) || 816; 
-            state.canvasH = parseFloat(rs.height) || 1056;
-            if (rs.backgroundColor && rs.backgroundColor !== 'rgba(0, 0, 0, 0)') state.bgColor = rs.backgroundColor;
-            
-            state.elements = []; 
-            const rRect = root.getBoundingClientRect(); 
-            
-            const getRealZIndex = (node) => {
-                let el = node.nodeType === 3 ? node.parentNode : node;
-                let z = 0;
-                while (el && el !== document.body && el !== root.parentElement) {
-                    const zStr = window.getComputedStyle(el).zIndex;
-                    if (zStr !== 'auto' && !isNaN(parseInt(zStr))) {
-                        z = Math.max(z, parseInt(zStr));
-                    }
-                    el = el.parentElement;
-                }
-                return z;
-            };
+    // Hidden rendering container. Use current canvas size for accurate layout
+    const container = document.createElement('div'); 
+    container.innerHTML = html; 
+    container.style.cssText = `position:absolute; top:0; left:0; width:${state.canvasW}px; height:${state.canvasH}px; opacity:0.001; pointer-events:none; margin:0; padding:0; z-index:-9999; overflow:visible;`;
+    document.body.appendChild(container);
 
-            const stripTranslation = (transformStr) => {
-                if (!transformStr || transformStr === 'none') return 'none';
-                return transformStr.replace(/matrix\(([^,]+),\s*([^,]+),\s*([^,]+),\s*([^,]+),\s*[^,]+,\s*[^)]+\)/, 'matrix($1, $2, $3, $4, 0, 0)');
-            };
-            
-            const w = document.createTreeWalker(root, NodeFilter.SHOW_ELEMENT | NodeFilter.SHOW_TEXT); 
-            let c = w.currentNode; 
-            
-            while (c) {
-                if (c.nodeType === 1) { 
-                    const tag = c.tagName.toLowerCase(); 
-                    const st = window.getComputedStyle(c); 
-                    const rect = c.getBoundingClientRect();
-                    
-                    if (tag !== 'span' && rect.width === 0 && rect.height === 0) { c = w.nextNode(); continue; }
+    const parsedRoot = container.firstElementChild;
+    if (parsedRoot) parsedRoot.classList.add('flyer-parser-root');
 
-                    const zIndex = getRealZIndex(c);
-                    const cleanTransform = stripTranslation(st.transform);
-                    let op = parseFloat(st.opacity);
-                    if (isNaN(op)) op = 1;
+    // Wait for assets to render
+    await document.fonts.ready; 
+    await new Promise(r => setTimeout(r, 800)); 
 
-                    if (tag === 'svg') {
-                        state.elements.push({ id: crypto.randomUUID(), type: 'svg', content: c.outerHTML, x: rect.left - rRect.left, y: rect.top - rRect.top, w: rect.width, h: rect.height, angle: 0, opacity: op, zIndex: zIndex, fill: '', stroke: '' });
-                        while (c = w.nextNode()) if (!c || !c.ownerSVGElement) break; continue;
-                    }
+    // Find main wrapper
+    let mainWrapper = container.querySelector('.canvas-container') || container.querySelector('.flyer-parser-root') || container;
 
-                    const bgImg = st.backgroundImage;
-                    if (bgImg && bgImg.includes('url(')) {
-                        const m = bgImg.match(/url\(['"]?(.*?)['"]?\)/);
-                        if (m && m[1]) state.elements.push({ id: crypto.randomUUID(), type: 'image', content: m[1], x: rect.left - rRect.left, y: rect.top - rRect.top, w: rect.width, h: rect.height, angle: 0, opacity: op, zIndex: zIndex, radius: parseFloat(st.borderRadius) || 0, filters: { b: 0, c: 0, s: 0, bl: 0 }, shadow: { c: '#000', bl: 0, x: 0, y: 0 } });
-                    } 
-                    
-                    const isGradient = bgImg && bgImg.includes('gradient');
-                    const hasColorBg = st.backgroundColor !== 'rgba(0, 0, 0, 0)' && st.backgroundColor !== 'transparent';
-                    const hasBorder = st.borderWidth !== '0px' && st.borderStyle !== 'none';
+    const rs = window.getComputedStyle(mainWrapper);
+    state.canvasW = parseFloat(rs.width) || 816; 
+    state.canvasH = parseFloat(rs.height) || 1056;
+    if (rs.backgroundColor && rs.backgroundColor !== 'rgba(0, 0, 0, 0)') state.bgColor = rs.backgroundColor;
+    
+    state.elements = []; 
+    // This is our absolute reference for coordinates. (rect.top - rRect.top gives the relative position)
+    const rRect = mainWrapper.getBoundingClientRect(); 
+    
+    const getRealZIndex = (node) => {
+        let el = node.nodeType === 3 ? node.parentNode : node;
+        let z = 0;
+        while (el && el !== document.body && el !== mainWrapper.parentElement) {
+            const zStr = window.getComputedStyle(el).zIndex;
+            if (zStr !== 'auto' && !isNaN(parseInt(zStr))) z = Math.max(z, parseInt(zStr));
+            el = el.parentElement;
+        }
+        return z;
+    };
 
-                    if (isGradient || hasColorBg || hasBorder) {
-                        state.elements.push({
-                            id: crypto.randomUUID(), type: 'shape',
-                            x: rect.left - rRect.left, y: rect.top - rRect.top,
-                            w: rect.width, h: rect.height, angle: 0, opacity: op, zIndex: zIndex,
-                            bgColor: st.backgroundColor, bgImage: isGradient ? bgImg : 'none',
-                            border: hasBorder ? `${st.borderWidth} ${st.borderStyle} ${st.borderColor}` : 'none',
-                            radius: parseFloat(st.borderRadius) || 0,
-                            backdropFilter: st.backdropFilter !== 'none' ? st.backdropFilter : 'none',
-                            transformMatrix: cleanTransform 
-                        });
-                    }
-                } else if (c.nodeType === 3 && c.textContent.trim().length > 0 && c.parentNode) { 
-                    const st = window.getComputedStyle(c.parentNode); 
-                    const rng = document.createRange(); rng.selectNodeContents(c); 
-                    const rect = rng.getBoundingClientRect();
-                    
-                    const fSize = parseFloat(st.fontSize) || 16;
-                    let finalW = rect.width;
-                    let finalH = rect.height;
-                    
-                    // Fallback if browser measurement fails
-                    if (finalW === 0) finalW = fSize * c.textContent.trim().length * 0.8;
-                    if (finalH === 0) finalH = fSize * 1.5;
+    const stripTranslation = (transformStr) => {
+        if (!transformStr || transformStr === 'none') return 'none';
+        return transformStr.replace(/matrix\(([^,]+),\s*([^,]+),\s*([^,]+),\s*([^,]+),\s*[^,]+,\s*[^)]+\)/, 'matrix($1, $2, $3, $4, 0, 0)');
+    };
+    
+    // Recursive element scanner
+    function processNode(node) {
+        if (node.nodeType !== 1) return; 
+        const tag = node.tagName.toLowerCase();
+        if (tag === 'script' || tag === 'style') return;
 
-                    const zIndex = getRealZIndex(c);
-                    const cleanTransform = stripTranslation(st.transform);
-                    
-                    let op = parseFloat(st.opacity);
-                    if (isNaN(op)) op = 1;
+        const st = window.getComputedStyle(node);
+        const rect = node.getBoundingClientRect();
 
-                    state.elements.push({ 
-                        id: crypto.randomUUID(), type: 'text', content: c.textContent.trim().replace(/\n/g, '<br>'), 
-                        x: rect.left - rRect.left, y: rect.top - rRect.top, 
-                        w: finalW + 5, h: finalH + 5, // Tight padding
-                        angle: 0, opacity: op, zIndex: zIndex, 
-                        fontSize: fSize, 
-                        fontFamily: st.fontFamily, // FIX 2: Passed directly as computed by the browser
-                        color: st.color, bold: st.fontWeight === 'bold' || parseInt(st.fontWeight) > 600, 
-                        italic: st.fontStyle === 'italic', underline: st.textDecorationLine.includes('underline'), 
-                        textAlign: st.textAlign, lineHeight: parseFloat(st.lineHeight) || 1.2, 
-                        letterSpacing: parseFloat(st.letterSpacing) || 0, 
-                        bgColor: st.backgroundColor === 'rgba(0, 0, 0, 0)' ? 'transparent' : st.backgroundColor, 
-                        radius: parseFloat(st.borderRadius) || 0,
-                        textShadow: st.textShadow !== 'none' ? st.textShadow : 'none', 
-                        transformMatrix: cleanTransform 
-                    });
-                } 
-                c = w.nextNode();
-            }
-            
-            state.elements.sort((a, b) => a.zIndex - b.zIndex);
-            state.elements.forEach((el, index) => el.zIndex = index);
+        const isIconWrap = node.classList.contains('fa-wrap') || node.querySelector('[class*="fa-"]') !== null || node.className.includes('fa-');
+        
+        if (rect.width === 0 && rect.height === 0 && tag !== 'span' && !isIconWrap) return;
 
-            document.body.removeChild(container); 
-            state.history = []; state.historyIdx = -1; saveHistory(); resetZoomPan(); renderCanvas();
+        const zIndex = getRealZIndex(node);
+        const cleanTransform = stripTranslation(st.transform);
+        let op = parseFloat(st.opacity); if (isNaN(op)) op = 1;
+
+        // FIXED: Strictly Trust Viewport Coordinates.
+        let elX = rect.left - rRect.left;
+        let elY = rect.top - rRect.top;
+
+        // FIXED: Circular Image Math. We need an accurate comparison of width vs height.
+        let elW = rect.width;
+        let elH = rect.height;
+        let radiusPx = 0;
+        
+        // Find if any border properties have '%' in the inline style.
+        const radii = [node.style.borderRadius, node.style.borderTopLeftRadius, node.style.borderTopRightRadius];
+        const percentValStr = radii.find(r => r && r.includes('%'));
+        
+        if (percentValStr) {
+            // For circles, the radius is width/2 or height/2, whichever is smaller
+            const percentVal = parseFloat(percentValStr);
+            radiusPx = (percentVal / 100) * Math.min(elW, elH);
+        } else {
+            // Otherwise trust computed pixels from the browser (148px etc.)
+            radiusPx = parseFloat(window.getComputedStyle(node).borderRadius) || 0;
         }
 
+        // --- A. Handle Actual <img> Tags ---
+        if (tag === 'img') {
+            state.elements.push({
+                id: crypto.randomUUID(), type: 'image', content: node.src,
+                x: elX, y: elY, w: elW, h: elH, angle: 0, opacity: op, zIndex: zIndex,
+                radius: radiusPx, objectFit: st.objectFit || 'fill',
+                filters: { b: 0, c: 0, s: 0, bl: 0 }, shadow: { c: '#000', bl: 0, x: 0, y: 0 }
+            });
+            return; 
+        }
+
+        // --- B. Handle SVGs ---
+        if (tag === 'svg') {
+            state.elements.push({ 
+                id: crypto.randomUUID(), type: 'svg', content: node.outerHTML, 
+                x: elX, y: elY, w: elW || 50, h: elH || 50, 
+                angle: 0, opacity: op, zIndex: zIndex, fill: '', stroke: '' 
+            });
+            return;
+        }
+
+        // --- C. Handle Leaf Text Blocks & Icons ---
+        let isTextLeaf = false;
+        const hasText = node.textContent.trim().length > 0;
+        
+        if (hasText || isIconWrap) {
+            isTextLeaf = true;
+            for (let i = 0; i < node.children.length; i++) {
+                const ct = node.children[i].tagName.toLowerCase();
+                const isFa = node.children[i].className.includes('fa-') || node.children[i].classList.contains('fa-wrap');
+                if (!['br', 'span', 'i', 'b', 'strong', 'em', 'div', 'p'].includes(ct) && !isFa) {
+                    isTextLeaf = false; break;
+                }
+            }
+        }
+
+        if (isTextLeaf) {
+            let fSize = parseFloat(st.fontSize) || 16;
+            
+            // Correct Line Height Math
+            let lhRaw = st.lineHeight;
+            let lhMulti = 1.2;
+            if (lhRaw && lhRaw.endsWith('px')) lhMulti = parseFloat(lhRaw) / fSize;
+            else if (lhRaw && lhRaw !== 'normal' && !isNaN(parseFloat(lhRaw))) lhMulti = parseFloat(lhRaw);
+
+            state.elements.push({ 
+                id: crypto.randomUUID(), type: 'text', 
+                content: node.innerHTML.trim().replace(/\n/g, ''), 
+                x: elX, y: elY, w: elW, h: elH, 
+                angle: 0, opacity: op, zIndex: zIndex, 
+                fontSize: fSize, fontFamily: st.fontFamily, color: st.color, 
+                bold: st.fontWeight === 'bold' || parseInt(st.fontWeight) >= 600, 
+                italic: st.fontStyle === 'italic', 
+                underline: st.textDecorationLine ? st.textDecorationLine.includes('underline') : false, 
+                textAlign: st.textAlign, lineHeight: Number(lhMulti.toFixed(2)), 
+                letterSpacing: parseFloat(st.letterSpacing) || 0, 
+                bgColor: st.backgroundColor === 'rgba(0, 0, 0, 0)' ? 'transparent' : st.backgroundColor, 
+                radius: radiusPx, textShadow: st.textShadow !== 'none' ? st.textShadow : 'none', 
+                transformMatrix: cleanTransform 
+            });
+            return; 
+        }
+
+        // --- D. Handle Background Images & Shapes ---
+        const bgImg = st.backgroundImage;
+        const hasColorBg = st.backgroundColor !== 'rgba(0, 0, 0, 0)' && st.backgroundColor !== 'transparent';
+        const hasBorder = st.borderWidth !== '0px' && st.borderStyle !== 'none';
+
+        if (bgImg && bgImg.includes('url(') && node !== mainWrapper) {
+            const m = bgImg.match(/url\(['"]?(.*?)['"]?\)/);
+            if (m && m[1]) {
+                state.elements.push({ 
+                    id: crypto.randomUUID(), type: 'image', content: m[1], 
+                    x: elX, y: elY, w: elW, h: elH, angle: 0, opacity: op, zIndex: zIndex, 
+                    radius: radiusPx, objectFit: st.objectFit || 'fill',
+                    filters: { b: 0, c: 0, s: 0, bl: 0 }, shadow: { c: '#000', bl: 0, x: 0, y: 0 } 
+                });
+            }
+        } else if ((bgImg.includes('gradient') || hasColorBg || hasBorder) && node !== mainWrapper) {
+            state.elements.push({
+                id: crypto.randomUUID(), type: 'shape',
+                x: elX, y: elY, w: elW, h: elH, angle: 0, opacity: op, zIndex: zIndex,
+                bgColor: st.backgroundColor, bgImage: bgImg.includes('gradient') ? bgImg : 'none',
+                border: hasBorder ? `${st.borderWidth} ${st.borderStyle} ${st.borderColor}` : 'none',
+                radius: radiusPx, backdropFilter: st.backdropFilter !== 'none' ? st.backdropFilter : 'none',
+                transformMatrix: cleanTransform 
+            });
+        }
+
+        // Recursively continue down the tree
+        for (let i = 0; i < node.children.length; i++) {
+            processNode(node.children[i]);
+        }
+    }
+
+    // Process all children of the main wrapper
+    for (let i = 0; i < mainWrapper.children.length; i++) {
+        processNode(mainWrapper.children[i]);
+    }
+    
+    // Final state update
+    state.elements.sort((a, b) => a.zIndex - b.zIndex);
+    state.elements.forEach((el, index) => el.zIndex = index);
+
+    document.body.removeChild(container); 
+    state.history = []; state.historyIdx = -1; saveHistory(); resetZoomPan(); renderCanvas();
+}
+
+       
         // SVG Raw Edit
         function applyRawSvg() { const el = getSelectedElement(); if (el) { el.content = DOMSanitizer.sanitize(document.getElementById('svg-raw-input').value); renderCanvas(); saveHistory(); hideModal('modal-svg'); } }
 
@@ -1761,7 +1801,7 @@ function exportToPDF() {
     img.src = url;
 }
         
-window.addEventListener('load', autoFitMobile);
+        window.addEventListener('load', autoFitMobile);
         window.addEventListener('resize', autoFitMobile);
 
     </script>
