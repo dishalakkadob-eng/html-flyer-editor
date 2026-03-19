@@ -584,7 +584,9 @@
         <div class="toolbar-group">
             <button onclick="addText()">+ Text</button>
             <button onclick="document.getElementById('add-image-input').click()">+ Image</button>
-            <input type="file" id="add-image-input" accept="image/*" style="display:none" onchange="addImageFile(this)">
+            <input type="file" id="add-image-input" accept="image/png, image/jpeg, image/webp" style="display:none" onchange="addImageFile(this)">
+            <button onclick="document.getElementById('add-svg-input').click()">+ SVG</button>
+            <input type="file" id="add-svg-input" accept=".svg" style="display:none" onchange="addSvgFile(this)">
             <button id="btn-grid" onclick="toggleGrid()">Grid</button>
         </div>
         <div class="toolbar-group">
@@ -664,10 +666,44 @@
             </div>
 
             <div class="panel-section" id="panel-text">
+                
                 <h3>Text Properties</h3>
+                    <div class="control-group">
+                        <label>Font Family</label>
+                        <select id="prop-fontfamily">
+                            <optgroup label="Standard Fonts">
+                                <option value="'Inter', sans-serif">Inter (Default)</option>
+                                <option value="Arial, sans-serif">Arial</option>
+                                <option value="'Times New Roman', serif">Times New Roman</option>
+                                <option value="'Courier New', monospace">Courier New</option>
+                                <option value="Georgia, serif">Georgia</option>
+                                <option value="Verdana, sans-serif">Verdana</option>
+                            </optgroup>
+                            <optgroup label="Brand Fonts">
+                                <option value="Trueno">Trueno</option>
+                                <option value="TruenoBd">Trueno Bold</option>
+                                <option value="TruenoSBd">Trueno Semi-Bold</option>
+                            </optgroup>
+                            <optgroup label="Icons">
+                                <option value="'Material Symbols Outlined'">Material Symbols</option>
+                                <option value="'Material Icons'">Material Icons</option>
+                            </optgroup>
+                            <optgroup label="Template Font" id="optgroup-custom" style="display:none;"></optgroup>
+                        </select>
+                    </div>
+                
                 <div class="control-group control-row">
                     <div><label>Font Size</label><input type="number" id="prop-fontsize" min="8" step="1"></div>
                     <div><label>Text Colour</label><input type="color" id="prop-fontcolor"></div>
+                </div>
+                <div class="control-group">
+                    <label>Text Case</label>
+                    <select id="prop-transform">
+                        <option value="none">None (As Typed)</option>
+                        <option value="uppercase">UPPERCASE</option>
+                        <option value="lowercase">lowercase</option>
+                        <option value="capitalize">Capitalize</option>
+                    </select>
                 </div>
                 <div class="control-group btn-group" style="margin-bottom:15px;">
                     <button id="btn-bold" onclick="toggleBoolProp('bold')"><b>B</b></button>
@@ -697,7 +733,7 @@
                 <div class="control-group">
                     <button onclick="document.getElementById('replace-img-input').click()"
                         style="width:100%; margin-bottom:15px;">Replace Image...</button>
-                    <input type="file" id="replace-img-input" accept="image/*" style="display:none"
+                    <input type="file" id="replace-img-input" accept="image/png, image/jpeg, image/webp" style="display:none"
                         onchange="replaceImageFile(this)">
                 </div>
                 <div class="control-group">
@@ -713,17 +749,26 @@
                 <div class="control-group"><label>Blur</label><input type="range" id="prop-blur" min="0" max="20"
                         step="0.5"></div>
             </div>
-
+            
             <div class="panel-section" id="panel-svg">
-                <h3>Inline SVG</h3>
+                 <h3>Inline SVGs</h3>
+
                 <div class="control-group">
-                    <button onclick="showModal('modal-svg')" style="width:100%; margin-bottom:15px;">Edit Raw SVG
-                        Code</button>
+                    <button onclick="document.getElementById('replace-svg-input').click()" style="width:100%; margin-bottom:15px;">Replace SVG...</button>
+                    <input type="file" id="replace-svg-input" accept=".svg" style="display:none" onchange="replaceSvgFile(this)">
                 </div>
-                <div class="control-group control-row">
-                    <div><label>Fill</label><input type="color" id="prop-svgfill"></div>
-                    <div><label>Stroke</label><input type="color" id="prop-svgstroke"></div>
+                
+                <div class="control-group">
+                    <button onclick="openSvgModal()" style="width:100%; margin-bottom:15px;">Edit Raw SVG Code</button>
                 </div>
+                <h3>Edit Colors</h3>
+                <div id="svg-color-container" style="display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 15px;"></div>
+                
+                <button onclick="resetSvgToOriginal()" style="width:100%; margin-bottom:15px; background: transparent; border: 1px solid var(--text-muted); color: var(--text-main);">Reset to Original</button>
+    
+                <!-- <div class="control-group">
+                    <label>Stroke Width</label><input type="number" id="prop-svgstrokewidth" min="0" step="1">
+                </div> -->
             </div>
         </div>
     </div>
@@ -877,6 +922,8 @@
                     node.style.color = el.color; node.style.fontWeight = el.bold ? 'bold' : 'normal';
                     node.style.fontStyle = el.italic ? 'italic' : 'normal';
                     node.style.textDecoration = el.underline ? 'underline' : 'none';
+                    node.style.fontFamily = el.fontFamily;
+                    node.style.textTransform = el.textTransform || 'none';
                     node.style.textAlign = el.textAlign; node.style.lineHeight = el.lineHeight;
                     node.style.letterSpacing = el.letterSpacing + 'px'; node.style.backgroundColor = el.bgColor;
                     node.style.borderRadius = el.radius + 'px'; node.style.textTransform = el.textTransform || 'none';
@@ -905,16 +952,50 @@
                         }
                     });
                 } else if (el.type === 'image') {
-                    // node.innerHTML = `<img src="${el.content}" draggable="false" style="width:100%; height:100%; display:block; object-fit:fill; border-radius:${el.radius}px; filter: brightness(${1 + el.filters.b}) contrast(${1 + el.filters.c}) saturate(${1 + el.filters.s}) blur(${el.filters.bl}px); box-shadow: ${el.shadow.x}px ${el.shadow.y}px ${el.shadow.bl}px ${el.shadow.c}; pointer-events:none;"/>`;
+                  
                     const fit = el.objectFit || 'fill';
                     node.innerHTML = `<img src="${el.content}" draggable="false" style="width:100%; height:100%; display:block; object-fit:${fit}; border-radius:${el.radius}px; filter: brightness(${1 + el.filters.b}) contrast(${1 + el.filters.c}) saturate(${1 + el.filters.s}) blur(${el.filters.bl}px); box-shadow: ${el.shadow.x}px ${el.shadow.y}px ${el.shadow.bl}px ${el.shadow.c}; pointer-events:none;"/>`;
                 } else if (el.type === 'svg') {
                     node.innerHTML = DOMSanitizer.sanitize(el.content);
+
+                    if (node.firstElementChild) {
+                        node.firstElementChild.style.pointerEvents = 'none';
+                    }
+
+                    // Support for Font-based Icons (FontAwesome / Material)
+                    if (el.fill) node.style.color = el.fill;
+
                     const svg = node.querySelector('svg');
                     if (svg) {
-                        svg.style.width = '100%'; svg.style.height = '100%'; svg.style.display = 'block';
-                        if (el.fill) svg.style.fill = el.fill; if (el.stroke) svg.style.stroke = el.stroke;
-                        if (el.strokeWidth) svg.style.strokeWidth = el.strokeWidth + 'px';
+                        // REQUIRED: Force the SVG to ignore its internal aspect ratio and stretch
+                        svg.setAttribute('preserveAspectRatio', 'none'); 
+                        
+                        // Ensure it fills the resized canvas element box
+                        svg.style.width = '100%'; 
+                        svg.style.height = '100%'; 
+                        svg.style.display = 'block';
+                        
+                        // Apply Fill and Stroke properties
+                        if (el.fill) {
+                            svg.style.fill = el.fill;
+                            svg.querySelectorAll('path, circle, rect, polygon, ellipse').forEach(path => {
+                                path.setAttribute('fill', el.fill);
+                                path.style.fill = el.fill;
+                            });
+                        }
+                        if (el.stroke) {
+                            svg.style.stroke = el.stroke;
+                            svg.querySelectorAll('path, circle, rect, polygon, ellipse').forEach(path => {
+                                path.setAttribute('stroke', el.stroke);
+                                path.style.stroke = el.stroke;
+                            });
+                        }
+                        if (el.strokeWidth !== undefined) {
+                            svg.style.strokeWidth = el.strokeWidth + 'px';
+                            svg.querySelectorAll('path, circle, rect, polygon, ellipse').forEach(path => {
+                                path.setAttribute('stroke-width', el.strokeWidth);
+                            });
+                        }
                     }
                 } else if (el.type === 'shape') {
                     // NEW: Handles gradients, transparent boxes, and borders
@@ -994,8 +1075,15 @@
                     targetNode.style.width = 'min-content';
                     dragStartObj.minWidth = targetNode.offsetWidth + 2; // +2px safety buffer
                     targetNode.style.width = oldW;
+                } else if (selEl.type === 'image') {
+                    dragStartObj.minWidth = 50; 
+                    dragStartObj.minHeight = 50;
+                } else if (selEl.type === 'svg') {
+                    dragStartObj.minWidth = 25; 
+                    dragStartObj.minHeight = 25;
                 } else {
-                    dragStartObj.minWidth = 30;
+                    dragStartObj.minWidth = 10;
+                    dragStartObj.minHeight = 10;
                 }
 
                 e.preventDefault();
@@ -1072,8 +1160,8 @@
 
                 if (isSideHandle) {
                     // --- NEW CHANGE: Apply the min-width lock ONLY to side-resizing to preserve autowrapping ---
-                    const MIN_W = dragStartObj.minWidth || 30;
-                    const MIN_H = 30;
+                    const MIN_W = dragStartObj.minWidth || 20;
+                    const MIN_H = dragStartObj.minWidth || 20;;
                     if (dragMode === 'e') w = Math.max(MIN_W, u_mx - dragStartObj.x);
                     if (dragMode === 'w') { 
                         const r = dragStartObj.x + dragStartObj.w; 
@@ -1101,7 +1189,7 @@
 
                 if (isCornerHandle) {
 
-                    // --- NEW FIX: Diagonal Vector Projection for uniform scaling speed ---
+                    // Diagonal Vector Projection for uniform scaling speed
                     const dirX = dragMode.includes('e') ? 1 : -1;
                     const dirY = dragMode.includes('s') ? 1 : -1;
                     
@@ -1119,13 +1207,29 @@
                     
                     let scaleFactor = dotProduct / diagLengthSq;
 
-                    // --- NEW CHANGE: Allow proportional corner scaling without being blocked by the static min-width ---
-                    scaleFactor = Math.max(0.2, scaleFactor); // Limit scaling down to 20% of original size so it doesn't flip
-                    
+                    // --- SPLIT LOGIC: Text keeps its original logic, SVG/Image use absolute pixel limits ---
                     if (el.type === 'text') {
+                        // ORIGINAL WORKING TEXT LOGIC
+                        scaleFactor = Math.max(0.2, scaleFactor); // Limit scaling down to 20%
                         const minScaleLimit = 8 / dragStartObj.fontSize;
                         scaleFactor = Math.max(scaleFactor, minScaleLimit);
                         el.fontSize = dragStartObj.fontSize * scaleFactor;
+                    } else {
+                        // NEW IMAGE/SVG DYNAMIC PIXEL LIMITS
+                        let minAllowedWidth = 20;
+                        let minAllowedHeight = 20;
+
+                        if (el.type === 'image') {
+                            minAllowedWidth = 50;  // Images stop shrinking at 50px
+                            minAllowedHeight = 50;
+                        } else if (el.type === 'svg') {
+                            minAllowedWidth = 25;  // SVGs/Icons stop shrinking at 25px
+                            minAllowedHeight = 25;
+                        }
+
+                        // Calculate the scale factor required to hit those exact minimum pixel sizes
+                        const minScaleLimit = Math.max(minAllowedWidth / dragStartObj.w, minAllowedHeight / dragStartObj.h);
+                        scaleFactor = Math.max(scaleFactor, minScaleLimit);
                     }
 
                     w = dragStartObj.w * scaleFactor;
@@ -1196,7 +1300,32 @@
             setV('prop-angle', Math.round(el.angle)); setV('prop-opacity', el.opacity);
 
             if (el.type === 'text') {
+                // --- FIXED FONT FAMILY DISPLAY ---
+                const fontSelect = document.getElementById('prop-fontfamily');
+                const customGroup = document.getElementById('optgroup-custom');
+                
+                // Clear previous custom option
+                customGroup.innerHTML = '';
+                customGroup.style.display = 'none';
+
+                let exists = false;
+                for (let i = 0; i < fontSelect.options.length; i++) {
+                    if (fontSelect.options[i].value === el.fontFamily) {
+                        exists = true;
+                        break;
+                    }
+                }
+                if (!exists) {
+                    const newOpt = document.createElement('option');
+                    newOpt.value = el.fontFamily;
+                    // Clean up the name for display (e.g., remove quotes)
+                    newOpt.innerText = el.fontFamily.replace(/['"]/g, '') + " (Template)";
+                    customGroup.appendChild(newOpt);
+                    customGroup.style.display = 'block';
+                }
+
                 setV('prop-fontsize', el.fontSize); setV('prop-fontcolor', rgbToHex(el.color)); setV('prop-align', el.textAlign);
+                setV('prop-fontfamily', el.fontFamily);setV('prop-transform', el.textTransform || 'none');
                 setV('prop-lineheight', el.lineHeight); setV('prop-charspacing', el.letterSpacing); setV('prop-textbg', rgbToHex(el.bgColor)); setV('prop-textrx', el.radius);
                 document.getElementById('btn-bold').classList.toggle('active', el.bold); document.getElementById('btn-italic').classList.toggle('active', el.italic); document.getElementById('btn-underline').classList.toggle('active', el.underline);
             }
@@ -1204,7 +1333,59 @@
                 setV('prop-imageradius', el.radius); setV('prop-brightness', el.filters.b); setV('prop-contrast', el.filters.c);
                 setV('prop-saturation', el.filters.s); setV('prop-blur', el.filters.bl);
             }
-            if (el.type === 'svg') { setV('prop-svgfill', el.fill || '#000000'); setV('prop-svgstroke', el.stroke || '#000000'); }
+
+            if (el.type === 'svg') {
+                const container = document.getElementById('svg-color-container');
+                container.innerHTML = ''; 
+
+                const colors = getUniqueSvgColors(el.content);
+                
+                colors.forEach(color => {
+                    // Wrapper for the bubble and the hidden input
+                    const wrapper = document.createElement('div');
+                    wrapper.style.position = 'relative';
+                    wrapper.style.width = '30px';
+                    wrapper.style.height = '30px';
+
+                    // The visible bubble (swatch)
+                    const swatch = document.createElement('div');
+                    swatch.style.cssText = `
+                        width: 100%; height: 100%; border-radius: 50%; 
+                        background: ${color}; cursor: pointer; border: 2px solid #fff;
+                        box-shadow: 0 0 0 1px var(--border);
+                    `;
+
+                    // The hidden color input (positioned behind the bubble)
+                    const input = document.createElement('input');
+                    input.type = 'color';
+                    input.value = color;
+                    // FIX: Positioned absolute behind the swatch so the popup anchors nearby
+                    input.style.cssText = `
+                        position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+                        opacity: 0; pointer-events: none;
+                    `;
+
+                    swatch.onclick = () => input.click();
+                    
+                    // FIX: Use 'oninput' for live updates as the user drags the picker
+                    input.oninput = (e) => {
+                        replaceSvgColor(el, color, e.target.value);
+                    };
+                    
+                    // Save history only when the user finishes picking a color
+                    input.onchange = () => {
+                        saveHistory();
+                        updatePanel(); // Refresh swatches with new values
+                    };
+
+                    wrapper.appendChild(swatch);
+                    wrapper.appendChild(input);
+                    container.appendChild(wrapper);
+                });
+
+                const swInput = document.getElementById('prop-svgstrokewidth');
+                if (swInput) swInput.value = el.strokeWidth || 0;
+            }
         }
 
         function rgbToHex(c) {
@@ -1223,11 +1404,12 @@
         }
         bindProp('prop-x', 'x', null, true); bindProp('prop-y', 'y', null, true); bindProp('prop-w', 'w', null, true); bindProp('prop-h', 'h', null, true);
         bindProp('prop-angle', 'angle', null, true); bindProp('prop-opacity', 'opacity', null, true);
+        bindProp('prop-fontfamily', 'fontFamily');bindProp('prop-transform', 'textTransform');
         bindProp('prop-fontsize', 'fontSize', null, true); bindProp('prop-fontcolor', 'color'); bindProp('prop-lineheight', 'lineHeight', null, true);
         bindProp('prop-charspacing', 'letterSpacing', null, true); bindProp('prop-textbg', 'bgColor'); bindProp('prop-textrx', 'radius', null, true);
         bindProp('prop-imageradius', 'radius', null, true); bindProp('prop-brightness', 'b', 'filters', true); bindProp('prop-contrast', 'c', 'filters', true);
         bindProp('prop-saturation', 's', 'filters', true); bindProp('prop-blur', 'bl', 'filters', true);
-        bindProp('prop-svgfill', 'fill'); bindProp('prop-svgstroke', 'stroke');
+        bindProp('prop-svgfill', 'fill'); bindProp('prop-svgstroke', 'stroke');bindProp('prop-svgstrokewidth', 'strokeWidth', null, true);
 
         function toggleBoolProp(key) { const el = getSelectedElement(); if (el) { el[key] = !el[key]; renderCanvas(); saveHistory(); updatePanel(); } }
         function setProp(key, val) { const el = getSelectedElement(); if (el) { el[key] = val; renderCanvas(); saveHistory(); } }
@@ -1390,8 +1572,146 @@
         }
         function replaceImageFile(input) {
             const el = getSelectedElement(); if (!el || el.type !== 'image' || !input.files.length) return;
+            const file = input.files[0];
+            // Reject SVG files specifically
+            if (file.type === "image/svg+xml" || file.name.toLowerCase().endsWith('.svg')) {
+                alert("Please select a standard image (JPG, PNG, WebP). Use the SVG replacement button for .svg files.");
+                input.value = '';
+                return;
+            }
             const reader = new FileReader(); reader.onload = e => { el.content = e.target.result; renderCanvas(); saveHistory(); };
-            reader.readAsDataURL(input.files[0]); input.value = '';
+            reader.readAsDataURL(file); input.value = '';
+        }
+
+        // --- SVG Functions ---
+
+        // 1. Add new SVG from computer
+        function addSvgFile(input) {
+            if (!input.files.length) return; 
+            const reader = new FileReader();
+            reader.onload = e => {
+                const center = getVisibleCenter(); 
+                const el = { 
+                    id: crypto.randomUUID(), type: 'svg', content: e.target.result, originalContent: e.target.result,
+                    x: state.canvasW / 2 - 50, // Perfect Center (for 100px width)
+                    y: state.canvasH / 2 - 50,
+                    w: 100, h: 100, angle: 0, opacity: 1, zIndex: state.elements.length, 
+                    fill: '', stroke: '', strokeWidth: 0
+                };
+                state.elements.push(el); 
+                selectElement(el.id); 
+                saveHistory();
+            }; 
+            // Read SVGs as pure text/markup
+            reader.readAsText(input.files[0]); 
+            input.value = '';
+        }
+
+        // 2. Replace existing SVG
+        function replaceSvgFile(input) {
+            const el = getSelectedElement(); 
+            if (!el || el.type !== 'svg' || !input.files.length) return;
+
+            const file = input.files[0];
+            // Ensure only SVGs are processed
+            if (!file.name.toLowerCase().endsWith('.svg')) {
+                alert("Please select a valid .svg file.");
+                input.value = '';
+                return;
+            }
+            
+            const reader = new FileReader(); 
+            reader.onload = e => { 
+                el.content = e.target.result; 
+                renderCanvas(); 
+                saveHistory(); 
+            };
+            reader.readAsText(file); 
+            input.value = '';
+        }
+
+        // 3. Open raw code modal and populate it with the current SVG
+        function openSvgModal() {
+            const el = getSelectedElement();
+            if (el && el.type === 'svg') {
+                document.getElementById('svg-raw-input').value = el.content;
+                showModal('modal-svg');
+            }
+        }
+
+        // Normalizes any color string to a standard Hex format for comparison
+        function normalizeToHex(color) {
+            if (!color || color === 'none' || color === 'transparent' || color === 'inherit') return null;
+            const ctx = document.createElement('canvas').getContext('2d');
+            ctx.fillStyle = color;
+            return ctx.fillStyle.toUpperCase();
+        }
+
+        // Extracts all unique fill and stroke colors from SVG markup
+        function getUniqueSvgColors(svgMarkup) {
+            const parser = new DOMParser();
+            const doc = parser.parseFromString(svgMarkup, 'image/svg+xml');
+            const colors = new Set();
+
+            const elements = doc.querySelectorAll('*');
+            elements.forEach(el => {
+                // Check attributes
+                ['fill', 'stroke'].forEach(attr => {
+                //     const val = normalizeToHex(el.getAttribute(attr));
+                //     if (val) colors.add(val);
+                // });
+                // // Check inline styles
+                // if (el.style.fill) {
+                //     const val = normalizeToHex(el.style.fill);
+                //     if (val) colors.add(val);
+                // }
+                // if (el.style.stroke) {
+                //     const val = normalizeToHex(el.style.stroke);
+                //     if (val) colors.add(val);
+                // }
+                const attrVal = el.getAttribute(attr);
+            const hex = normalizeToHex(attrVal);
+            if (hex) colors.add(hex);
+            
+            // Also check inline styles (style="fill:...")
+            const styleVal = el.style[attr];
+            const styleHex = normalizeToHex(styleVal);
+            if (styleHex) colors.add(styleHex);});
+            });
+            return Array.from(colors);
+        }
+
+        // Replaces every instance of an old color with a new color in the SVG string
+        function replaceSvgColor(el, oldColor, newColor) {
+            const parser = new DOMParser();
+            const doc = parser.parseFromString(el.content, 'image/svg+xml');
+            const elements = doc.querySelectorAll('*');
+
+            elements.forEach(node => {
+                ['fill', 'stroke'].forEach(attr => {
+                    if (normalizeToHex(node.getAttribute(attr)) === oldColor) {
+                        node.setAttribute(attr, newColor);
+                    }
+                    if (normalizeToHex(node.style[attr]) === oldColor) {
+                        node.style[attr] = newColor;
+                    }
+                });
+            });
+
+            el.content = new XMLSerializer().serializeToString(doc);
+            renderCanvas();
+            saveHistory();
+            updatePanel(); // Refresh bubbles
+        }
+
+        function resetSvgToOriginal() {
+            const el = getSelectedElement();
+            if (el && el.originalContent) {
+                el.content = el.originalContent;
+                renderCanvas();
+                saveHistory();
+                updatePanel();
+            }
         }
 
         // --- Modals / HTML Importer ---
@@ -1409,213 +1729,236 @@
             r.readAsText(input.files[0]); 
         }
 
+        // --- Replacement for parseHtmlIntoState ---
+
         async function parseHtmlIntoState(html) {
-    const doc = new DOMParser().parseFromString(html, 'text/html');
-    
-    // Inject external styles and fonts
-    doc.querySelectorAll('link[rel="stylesheet"], link[href*="font"]').forEach(link => {
-        if (!document.querySelector(`link[href="${link.href}"]`)) {
-            const newLink = document.createElement('link');
-            newLink.rel = 'stylesheet';
-            newLink.href = link.href;
-            document.head.appendChild(newLink);
-        }
-    });
-
-    doc.querySelectorAll('style').forEach(style => {
-        const newStyle = document.createElement('style');
-        newStyle.innerHTML = style.innerHTML;
-        document.head.appendChild(newStyle);
-    });
-
-    // Hidden rendering container. Use current canvas size for accurate layout
-    const container = document.createElement('div'); 
-    container.innerHTML = html; 
-    container.style.cssText = `position:absolute; top:0; left:0; width:${state.canvasW}px; height:${state.canvasH}px; opacity:0.001; pointer-events:none; margin:0; padding:0; z-index:-9999; overflow:visible;`;
-    document.body.appendChild(container);
-
-    const parsedRoot = container.firstElementChild;
-    if (parsedRoot) parsedRoot.classList.add('flyer-parser-root');
-
-    // Wait for assets to render
-    await document.fonts.ready; 
-    await new Promise(r => setTimeout(r, 800)); 
-
-    // Find main wrapper
-    let mainWrapper = container.querySelector('.canvas-container') || container.querySelector('.flyer-parser-root') || container;
-
-    const rs = window.getComputedStyle(mainWrapper);
-    state.canvasW = parseFloat(rs.width) || 816; 
-    state.canvasH = parseFloat(rs.height) || 1056;
-    if (rs.backgroundColor && rs.backgroundColor !== 'rgba(0, 0, 0, 0)') state.bgColor = rs.backgroundColor;
-    
-    state.elements = []; 
-    // This is our absolute reference for coordinates. (rect.top - rRect.top gives the relative position)
-    const rRect = mainWrapper.getBoundingClientRect(); 
-    
-    const getRealZIndex = (node) => {
-        let el = node.nodeType === 3 ? node.parentNode : node;
-        let z = 0;
-        while (el && el !== document.body && el !== mainWrapper.parentElement) {
-            const zStr = window.getComputedStyle(el).zIndex;
-            if (zStr !== 'auto' && !isNaN(parseInt(zStr))) z = Math.max(z, parseInt(zStr));
-            el = el.parentElement;
-        }
-        return z;
-    };
-
-    const stripTranslation = (transformStr) => {
-        if (!transformStr || transformStr === 'none') return 'none';
-        return transformStr.replace(/matrix\(([^,]+),\s*([^,]+),\s*([^,]+),\s*([^,]+),\s*[^,]+,\s*[^)]+\)/, 'matrix($1, $2, $3, $4, 0, 0)');
-    };
-    
-    // Recursive element scanner
-    function processNode(node) {
-        if (node.nodeType !== 1) return; 
-        const tag = node.tagName.toLowerCase();
-        if (tag === 'script' || tag === 'style') return;
-
-        const st = window.getComputedStyle(node);
-        const rect = node.getBoundingClientRect();
-
-        const isIconWrap = node.classList.contains('fa-wrap') || node.querySelector('[class*="fa-"]') !== null || node.className.includes('fa-');
-        
-        if (rect.width === 0 && rect.height === 0 && tag !== 'span' && !isIconWrap) return;
-
-        const zIndex = getRealZIndex(node);
-        const cleanTransform = stripTranslation(st.transform);
-        let op = parseFloat(st.opacity); if (isNaN(op)) op = 1;
-
-        // FIXED: Strictly Trust Viewport Coordinates.
-        let elX = rect.left - rRect.left;
-        let elY = rect.top - rRect.top;
-
-        // FIXED: Circular Image Math. We need an accurate comparison of width vs height.
-        let elW = rect.width;
-        let elH = rect.height;
-        let radiusPx = 0;
-        
-        // Find if any border properties have '%' in the inline style.
-        const radii = [node.style.borderRadius, node.style.borderTopLeftRadius, node.style.borderTopRightRadius];
-        const percentValStr = radii.find(r => r && r.includes('%'));
-        
-        if (percentValStr) {
-            // For circles, the radius is width/2 or height/2, whichever is smaller
-            const percentVal = parseFloat(percentValStr);
-            radiusPx = (percentVal / 100) * Math.min(elW, elH);
-        } else {
-            // Otherwise trust computed pixels from the browser (148px etc.)
-            radiusPx = parseFloat(window.getComputedStyle(node).borderRadius) || 0;
-        }
-
-        // --- A. Handle Actual <img> Tags ---
-        if (tag === 'img') {
-            state.elements.push({
-                id: crypto.randomUUID(), type: 'image', content: node.src,
-                x: elX, y: elY, w: elW, h: elH, angle: 0, opacity: op, zIndex: zIndex,
-                radius: radiusPx, objectFit: st.objectFit || 'fill',
-                filters: { b: 0, c: 0, s: 0, bl: 0 }, shadow: { c: '#000', bl: 0, x: 0, y: 0 }
+            const doc = new DOMParser().parseFromString(html, 'text/html');
+            
+            // Inject external styles and fonts
+            doc.querySelectorAll('link[rel="stylesheet"], link[href*="font"]').forEach(link => {
+                if (!document.querySelector(`link[href="${link.href}"]`)) {
+                    const newLink = document.createElement('link');
+                    newLink.rel = 'stylesheet';
+                    newLink.href = link.href;
+                    document.head.appendChild(newLink);
+                }
             });
-            return; 
-        }
 
-        // --- B. Handle SVGs ---
-        if (tag === 'svg') {
-            state.elements.push({ 
-                id: crypto.randomUUID(), type: 'svg', content: node.outerHTML, 
-                x: elX, y: elY, w: elW || 50, h: elH || 50, 
-                angle: 0, opacity: op, zIndex: zIndex, fill: '', stroke: '' 
+            doc.querySelectorAll('style').forEach(style => {
+                const newStyle = document.createElement('style');
+                newStyle.innerHTML = style.innerHTML;
+                document.head.appendChild(newStyle);
             });
-            return;
-        }
 
-        // --- C. Handle Leaf Text Blocks & Icons ---
-        let isTextLeaf = false;
-        const hasText = node.textContent.trim().length > 0;
-        
-        if (hasText || isIconWrap) {
-            isTextLeaf = true;
-            for (let i = 0; i < node.children.length; i++) {
-                const ct = node.children[i].tagName.toLowerCase();
-                const isFa = node.children[i].className.includes('fa-') || node.children[i].classList.contains('fa-wrap');
-                if (!['br', 'span', 'i', 'b', 'strong', 'em', 'div', 'p'].includes(ct) && !isFa) {
-                    isTextLeaf = false; break;
+            // Hidden rendering container. We set it wide to allow for background layout
+            const container = document.createElement('div'); 
+            container.innerHTML = html; 
+            container.style.cssText = 'position:absolute; top:0; left:0; width:1200px; height:1200px; opacity:0.001; pointer-events:none; margin:0; padding:0; z-index:-9999; overflow:hidden;';
+            document.body.appendChild(container);
+
+            const parsedRoot = container.firstElementChild;
+            if (parsedRoot) parsedRoot.classList.add('flyer-parser-root');
+
+            // Wait for external assets to paint so dimensions are accurate
+            await document.fonts.ready; 
+            await new Promise(r => setTimeout(r, 800)); // Short delay for images
+
+            // Target the main canvas area
+            let mainWrapper = container.querySelector('.canvas-container') || container.querySelector('.flyer-parser-root') || container;
+
+            const rs = window.getComputedStyle(mainWrapper);
+            state.canvasW = parseFloat(rs.width) || 816; 
+            state.canvasH = parseFloat(rs.height) || 1056;
+            if (rs.backgroundColor && rs.backgroundColor !== 'rgba(0, 0, 0, 0)') state.bgColor = rs.backgroundColor;
+            
+            state.elements = []; 
+            // Reference rect for positions. (rect.top - rRect.top) is the final pixel coordinate
+            const rRect = mainWrapper.getBoundingClientRect(); 
+            
+            // Helper to get z-index
+            const getRealZIndex = (node) => {
+                let el = node.nodeType === 3 ? node.parentNode : node;
+                let z = 0;
+                while (el && el !== document.body && el !== mainWrapper.parentElement) {
+                    const zStr = window.getComputedStyle(el).zIndex;
+                    if (zStr !== 'auto' && !isNaN(parseInt(zStr))) z = Math.max(z, parseInt(zStr));
+                    el = el.parentElement;
+                }
+                return z;
+            };
+
+            // Helper to strip translation from transforms
+            const stripTranslation = (transformStr) => {
+                if (!transformStr || transformStr === 'none') return 'none';
+                return transformStr.replace(/matrix\(([^,]+),\s*([^,]+),\s*([^,]+),\s*([^,]+),\s*[^,]+,\s*[^)]+\)/, 'matrix($1, $2, $3, $4, 0, 0)');
+            };
+            
+            // 4. RECURSIVE ELEMENT SCANNER
+            function processNode(node) {
+                if (node.nodeType !== 1) return; // Process elements only
+                const tag = node.tagName.toLowerCase();
+                if (tag === 'script' || tag === 'style') return;
+
+                const st = window.getComputedStyle(node);
+                const rect = node.getBoundingClientRect();
+
+                // Detect icon wrappers like <div class="fa-wrap">
+                const isIconWrap = node.classList.contains('fa-wrap') || node.querySelector('[class*="fa-"]') !== null || node.className.includes('fa-');
+                
+                // Skip entirely empty/invisible structural divs
+                if (rect.width === 0 && rect.height === 0 && tag !== 'span' && !isIconWrap) return;
+
+                const zIndex = getRealZIndex(node);
+                const cleanTransform = stripTranslation(st.transform);
+                let op = parseFloat(st.opacity); if (isNaN(op)) op = 1;
+
+                // FIXED: Strictly Trust Viewport Coordinates.
+                // The difference from rRect.top gives the final drawn pixel position.
+                let elX = rect.left - rRect.left;
+                let elY = rect.top - rRect.top;
+
+                // --- PRESERVED CIRCULAR IMAGE FIX ---
+                // We look for the '%' sign in the inline style first, before the browser converts it to pixels
+                let elW = rect.width;
+                let elH = rect.height;
+                let radiusPx = 0;
+                
+                // Use a precise approach: check if any radius property has a '%'
+                const radii = [node.style.borderRadius, node.style.borderTopLeftRadius, node.style.borderTopRightRadius];
+                const percentValStr = radii.find(r => r && r.includes('%'));
+                
+                if (percentValStr) {
+                    // For circles, the radius is half of the smaller dimension
+                    const percentVal = parseFloat(percentValStr);
+                    radiusPx = (percentVal / 100) * Math.min(elW, elH);
+                } else {
+                    // Otherwise trust computed pixels from the browser (148px etc.)
+                    radiusPx = parseFloat(window.getComputedStyle(node).borderRadius) || 0;
+                }
+
+                // --- A. Handle Actual <img> Tags ---
+                if (tag === 'img') {
+                    state.elements.push({
+                        id: crypto.randomUUID(), type: 'image', content: node.src,
+                        x: elX, y: elY, w: elW, h: elH, angle: 0, opacity: op, zIndex: zIndex,
+                        radius: radiusPx, objectFit: st.objectFit || 'fill',
+                        filters: { b: 0, c: 0, s: 0, bl: 0 }, shadow: { c: '#000', bl: 0, x: 0, y: 0 }
+                    });
+                    return; // Img has no valid children, stop traversal here
+                }
+
+                if (isIconWrap || tag === 'svg') {
+                    
+                    // FIX: Clone the element and strip absolute positioning so it doesn't double-offset!
+                    const clone = node.cloneNode(true);
+                    clone.style.position = 'static'; // Forces it to reset to 0,0 inside our canvas element
+                    clone.style.left = 'auto';
+                    clone.style.top = 'auto';
+                    clone.style.margin = '0';
+                    clone.style.transform = 'none';
+
+                    // Ensure true SVGs fill the canvas element box
+                    if (tag === 'svg') {
+                        clone.style.width = '100%';
+                        clone.style.height = '100%';
+                    }
+
+                    state.elements.push({ 
+                        id: crypto.randomUUID(), type: 'svg', content: clone.outerHTML, originalContent: clone.outerHTML,
+                        x: elX, y: elY, w: elW || 50, h: elH || 50, 
+                        angle: 0, opacity: op, zIndex: zIndex, fill: '', stroke: '' 
+                    });
+                    return; // Successfully grabbed the container, skip traversing children
+                }
+
+                // --- C. Handle Leaf Text Blocks ---
+                let isTextLeaf = false;
+                const hasText = node.textContent.trim().length > 0;
+                
+                if (hasText) {
+                    isTextLeaf = true;
+                    for (let i = 0; i < node.children.length; i++) {
+                        const ct = node.children[i].tagName.toLowerCase();
+                        // Allow inline formatters or generic blocks that don't shift layout
+                        if (!['br', 'span', 'i', 'b', 'strong', 'em', 'div', 'p'].includes(ct)) {
+                            isTextLeaf = false; break;
+                        }
+                    }
+                }
+
+                if (isTextLeaf) {
+                    let fSize = parseFloat(st.fontSize) || 16;
+                    
+                    // Correct Line Height Math
+                    let lhRaw = st.lineHeight;
+                    let lhMulti = 1.2;
+                    if (lhRaw && lhRaw.endsWith('px')) lhMulti = parseFloat(lhRaw) / fSize;
+                    else if (lhRaw && lhRaw !== 'normal' && !isNaN(parseFloat(lhRaw))) lhMulti = parseFloat(lhRaw);
+
+                    state.elements.push({ 
+                        id: crypto.randomUUID(), type: 'text', 
+                        content: node.innerHTML.trim().replace(/\n/g, ''), 
+                        x: elX, y: elY, w: elW, h: elH, 
+                        angle: 0, opacity: op, zIndex: zIndex, 
+                        fontSize: fSize, fontFamily: st.fontFamily, color: st.color, textTransform: st.textTransform || 'none',
+                        bold: st.fontWeight === 'bold' || parseInt(st.fontWeight) >= 600, 
+                        italic: st.fontStyle === 'italic', 
+                        underline: st.textDecorationLine ? st.textDecorationLine.includes('underline') : false, 
+                        textAlign: st.textAlign, lineHeight: Number(lhMulti.toFixed(2)), 
+                        letterSpacing: parseFloat(st.letterSpacing) || 0, 
+                        bgColor: st.backgroundColor === 'rgba(0, 0, 0, 0)' ? 'transparent' : st.backgroundColor, 
+                        radius: radiusPx, textShadow: st.textShadow !== 'none' ? st.textShadow : 'none', 
+                        transformMatrix: cleanTransform 
+                    });
+                    return; // Successfully absorbed into a text block, stop traversal
+                }
+
+                // --- D. Handle Background Images & Shapes ---
+                const bgImg = st.backgroundImage;
+                const hasColorBg = st.backgroundColor !== 'rgba(0, 0, 0, 0)' && st.backgroundColor !== 'transparent';
+                const hasBorder = st.borderWidth !== '0px' && st.borderStyle !== 'none';
+
+                if (bgImg && bgImg.includes('url(') && node !== mainWrapper) {
+                    const m = bgImg.match(/url\(['"]?(.*?)['"]?\)/);
+                    if (m && m[1]) {
+                        state.elements.push({ 
+                            id: crypto.randomUUID(), type: 'image', content: m[1], 
+                            x: elX, y: elY, w: elW, h: elH, angle: 0, opacity: op, zIndex: zIndex, 
+                            radius: radiusPx, objectFit: st.objectFit || 'fill',
+                            filters: { b: 0, c: 0, s: 0, bl: 0 }, shadow: { c: '#000', bl: 0, x: 0, y: 0 } 
+                        });
+                    }
+                } else if ((bgImg.includes('gradient') || hasColorBg || hasBorder) && node !== mainWrapper) {
+                    state.elements.push({
+                        id: crypto.randomUUID(), type: 'shape',
+                        x: elX, y: elY, w: elW, h: elH, angle: 0, opacity: op, zIndex: zIndex,
+                        bgColor: st.backgroundColor, bgImage: bgImg.includes('gradient') ? bgImg : 'none',
+                        border: hasBorder ? `${st.borderWidth} ${st.borderStyle} ${st.borderColor}` : 'none',
+                        radius: radiusPx, backdropFilter: st.backdropFilter !== 'none' ? st.backdropFilter : 'none',
+                        transformMatrix: cleanTransform 
+                    });
+                }
+
+                // 5. CONTINUE RECURSIVELY DOWN THE TREE
+                for (let i = 0; i < node.children.length; i++) {
+                    processNode(node.children[i]);
                 }
             }
-        }
 
-        if (isTextLeaf) {
-            let fSize = parseFloat(st.fontSize) || 16;
-            
-            // Correct Line Height Math
-            let lhRaw = st.lineHeight;
-            let lhMulti = 1.2;
-            if (lhRaw && lhRaw.endsWith('px')) lhMulti = parseFloat(lhRaw) / fSize;
-            else if (lhRaw && lhRaw !== 'normal' && !isNaN(parseFloat(lhRaw))) lhMulti = parseFloat(lhRaw);
-
-            state.elements.push({ 
-                id: crypto.randomUUID(), type: 'text', 
-                content: node.innerHTML.trim().replace(/\n/g, ''), 
-                x: elX, y: elY, w: elW, h: elH, 
-                angle: 0, opacity: op, zIndex: zIndex, 
-                fontSize: fSize, fontFamily: st.fontFamily, color: st.color, 
-                bold: st.fontWeight === 'bold' || parseInt(st.fontWeight) >= 600, 
-                italic: st.fontStyle === 'italic', 
-                underline: st.textDecorationLine ? st.textDecorationLine.includes('underline') : false, 
-                textAlign: st.textAlign, lineHeight: Number(lhMulti.toFixed(2)), 
-                letterSpacing: parseFloat(st.letterSpacing) || 0, 
-                bgColor: st.backgroundColor === 'rgba(0, 0, 0, 0)' ? 'transparent' : st.backgroundColor, 
-                radius: radiusPx, textShadow: st.textShadow !== 'none' ? st.textShadow : 'none', 
-                transformMatrix: cleanTransform 
-            });
-            return; 
-        }
-
-        // --- D. Handle Background Images & Shapes ---
-        const bgImg = st.backgroundImage;
-        const hasColorBg = st.backgroundColor !== 'rgba(0, 0, 0, 0)' && st.backgroundColor !== 'transparent';
-        const hasBorder = st.borderWidth !== '0px' && st.borderStyle !== 'none';
-
-        if (bgImg && bgImg.includes('url(') && node !== mainWrapper) {
-            const m = bgImg.match(/url\(['"]?(.*?)['"]?\)/);
-            if (m && m[1]) {
-                state.elements.push({ 
-                    id: crypto.randomUUID(), type: 'image', content: m[1], 
-                    x: elX, y: elY, w: elW, h: elH, angle: 0, opacity: op, zIndex: zIndex, 
-                    radius: radiusPx, objectFit: st.objectFit || 'fill',
-                    filters: { b: 0, c: 0, s: 0, bl: 0 }, shadow: { c: '#000', bl: 0, x: 0, y: 0 } 
-                });
+            // Start parsing from children of the mainWrapper
+            for (let i = 0; i < mainWrapper.children.length; i++) {
+                processNode(mainWrapper.children[i]);
             }
-        } else if ((bgImg.includes('gradient') || hasColorBg || hasBorder) && node !== mainWrapper) {
-            state.elements.push({
-                id: crypto.randomUUID(), type: 'shape',
-                x: elX, y: elY, w: elW, h: elH, angle: 0, opacity: op, zIndex: zIndex,
-                bgColor: st.backgroundColor, bgImage: bgImg.includes('gradient') ? bgImg : 'none',
-                border: hasBorder ? `${st.borderWidth} ${st.borderStyle} ${st.borderColor}` : 'none',
-                radius: radiusPx, backdropFilter: st.backdropFilter !== 'none' ? st.backdropFilter : 'none',
-                transformMatrix: cleanTransform 
-            });
-        }
+            
+            // Sort and reset z-indices
+            state.elements.sort((a, b) => a.zIndex - b.zIndex);
+            state.elements.forEach((el, index) => el.zIndex = index);
 
-        // Recursively continue down the tree
-        for (let i = 0; i < node.children.length; i++) {
-            processNode(node.children[i]);
-        }
-    }
-
-    // Process all children of the main wrapper
-    for (let i = 0; i < mainWrapper.children.length; i++) {
-        processNode(mainWrapper.children[i]);
-    }
-    
-    // Final state update
-    state.elements.sort((a, b) => a.zIndex - b.zIndex);
-    state.elements.forEach((el, index) => el.zIndex = index);
-
-    document.body.removeChild(container); 
-    state.history = []; state.historyIdx = -1; saveHistory(); resetZoomPan(); renderCanvas();
-}
-
+            document.body.removeChild(container); 
+            
+            // Update editor state
+            state.history = []; state.historyIdx = -1; saveHistory(); resetZoomPan(); renderCanvas();
+        }   
        
         // SVG Raw Edit
         function applyRawSvg() { const el = getSelectedElement(); if (el) { el.content = DOMSanitizer.sanitize(document.getElementById('svg-raw-input').value); renderCanvas(); saveHistory(); hideModal('modal-svg'); } }
