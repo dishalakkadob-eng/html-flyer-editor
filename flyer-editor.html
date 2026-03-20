@@ -6,6 +6,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>HTML Flyer Editor - Pure Native Engine (Zero Dependencies)</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 
     <style>
         /* CSS Reset & Vanilla Premium UI Theme */
@@ -417,6 +418,29 @@
             user-select: none; /* Prevent text selection blue highlights on drag */
         }
 
+        .spinner {
+            width: 48px;
+            height: 48px;
+            border: 5px solid rgba(255, 255, 255, 0.1);
+            border-top-color: var(--primary); /* Uses your indigo theme color */
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        #loader-text {
+            animation: pulse 1.5s ease-in-out infinite;
+            text-transform: uppercase;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
         @media (max-width: 768px) {
             body, html {
                 height: 100dvh; /* Uses dynamic viewport to prevent address bar jumping */
@@ -597,7 +621,7 @@
             <button onclick="zoomOut()">-</button>
             <span class="zoom-level" id="zoom-text">100%</span>
             <button onclick="zoomIn()">+</button>
-            <button onclick="resetZoomPan()">Fit</button>
+            <button onclick="fitToScreen()">Fit</button>
         </div>
         <div class="toolbar-group" style="padding-right:0; border:none;">
             <button onclick="exportToImage('png')">PNG Output</button>
@@ -884,6 +908,33 @@
                 restoreState(JSON.parse(state.history[state.historyIdx]));
             }
         }
+        function fitToScreen() {
+            const wrapper = document.getElementById('canvas-wrapper');
+            const rect = wrapper.getBoundingClientRect();
+            
+            const padding = 35; 
+            const availableW = rect.width - padding;
+            const availableH = rect.height - padding;
+
+            // Calculate the zoom needed to fit both width and height
+            const scaleX = availableW / state.canvasW;
+            const scaleY = availableH / state.canvasH;
+            
+            // Use the smaller scale to ensure nothing is cut off
+            // Cap at 1.0 (100%) if you don't want it to upscale on large monitors
+            state.zoom = Math.min(scaleX, scaleY, 1); 
+            
+            state.panX = 0;
+            state.panY = 0;
+
+            // Apply the transformation
+            d_scale.style.transform = `scale(${state.zoom})`;
+            d_pan.style.transform = `translate(0, 0)`;
+            
+            // Update the UI text
+            document.getElementById('zoom-text').innerText = Math.round(state.zoom * 100) + '%';
+            selectElement(null);
+        }
         function restoreState(s) {
             state.elements = s.el; state.bgColor = s.bg; state.canvasW = s.w; state.canvasH = s.h;
             renderCanvas(); updatePanel(); updateHistoryBtns();
@@ -930,6 +981,9 @@
                     node.style.display = 'block'; 
                     node.style.whiteSpace = 'pre-wrap'; // Allows wrapping on spaces
                     node.style.wordBreak = 'break-word'; 
+                    node.style.overflowWrap = 'anywhere'; // Stronger than break-word
+                    node.style.lineHeight = el.lineHeight || 1.2;
+                    node.style.boxSizing = 'border-box';
 
                     node.style.width = el.w + 'px';
                     node.style.height = 'auto';
@@ -1657,28 +1711,16 @@
             elements.forEach(el => {
                 // Check attributes
                 ['fill', 'stroke'].forEach(attr => {
-                //     const val = normalizeToHex(el.getAttribute(attr));
-                //     if (val) colors.add(val);
-                // });
-                // // Check inline styles
-                // if (el.style.fill) {
-                //     const val = normalizeToHex(el.style.fill);
-                //     if (val) colors.add(val);
-                // }
-                // if (el.style.stroke) {
-                //     const val = normalizeToHex(el.style.stroke);
-                //     if (val) colors.add(val);
-                // }
                 const attrVal = el.getAttribute(attr);
-            const hex = normalizeToHex(attrVal);
-            if (hex) colors.add(hex);
-            
-            // Also check inline styles (style="fill:...")
-            const styleVal = el.style[attr];
-            const styleHex = normalizeToHex(styleVal);
-            if (styleHex) colors.add(styleHex);});
-            });
-            return Array.from(colors);
+                const hex = normalizeToHex(attrVal);
+                if (hex) colors.add(hex);
+                
+                // Also check inline styles (style="fill:...")
+                const styleVal = el.style[attr];
+                const styleHex = normalizeToHex(styleVal);
+                if (styleHex) colors.add(styleHex);});
+                });
+                return Array.from(colors);
         }
 
         // Replaces every instance of an old color with a new color in the SVG string
@@ -1957,7 +1999,7 @@
             document.body.removeChild(container); 
             
             // Update editor state
-            state.history = []; state.historyIdx = -1; saveHistory(); resetZoomPan(); renderCanvas();
+            state.history = []; state.historyIdx = -1; saveHistory(); fitToScreen(); renderCanvas();
         }   
        
         // SVG Raw Edit
@@ -1967,7 +2009,6 @@
         function toggleGrid() { state.grid = !state.grid; document.getElementById('btn-grid').classList.toggle('active', state.grid); renderCanvas(); }
         function zoomIn() { state.zoom = Math.min(5, state.zoom + 0.2); d_scale.style.transform = `scale(${state.zoom})`; document.getElementById('zoom-text').innerText = Math.round(state.zoom * 100) + '%'; }
         function zoomOut() { state.zoom = Math.max(0.2, state.zoom - 0.2); d_scale.style.transform = `scale(${state.zoom})`; document.getElementById('zoom-text').innerText = Math.round(state.zoom * 100) + '%'; }
-        function resetZoomPan() { state.zoom = 1; state.panX = 0; state.panY = 0; d_scale.style.transform = 'scale(1)'; d_pan.style.transform = 'translate(0,0)'; document.getElementById('zoom-text').innerText = '100%'; selectElement(null); }
 
         window.addEventListener('keydown', e => {
             if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.isContentEditable || state.editingId) return;
@@ -1979,175 +2020,219 @@
             } else { if (e.key === 'Delete' || e.key === 'Backspace') deleteSelected(); if (e.key === 'Escape') selectElement(null); }
         });
 
-      
-
-        // --- UPDATED EXPORT TO IMAGE (Handles PNG, JPEG, and fixes text positioning and CORS) ---
-function exportToImage(format) {
-    selectionOverlay.style.display = 'none';
-    const currentGrid = state.grid;
-    state.grid = false;
-    renderCanvas();
-
-    // Fix for Positioning: Convert all dynamic positioning to absolute pixel values
-    const elementsToCapture = [];
-    Array.from(canvasEl.childNodes).forEach(node => {
-        if (node.id === 'selection-overlay') return;
-        if (node.nodeType === 1) { // Node.ELEMENT_NODE
-            const clone = node.cloneNode(true);
-            const rect = node.getBoundingClientRect();
-            const canvasRect = canvasEl.getBoundingClientRect();
-            
-            // Apply absolute pixel values relative to the canvas
-            clone.style.left = `${rect.left - canvasRect.left}px`;
-            clone.style.top = `${rect.top - canvasRect.top}px`;
-            clone.style.position = 'absolute';
-            clone.style.transform = 'none'; // Clear any existing transform
-            clone.style.margin = '0';
-            
-            elementsToCapture.push(clone);
+        function showLoading(text = "PROCESSING EXPORT...") {
+            const loader = document.getElementById('export-loader');
+            document.getElementById('loader-text').innerText = text;
+            loader.style.display = 'flex';
         }
-    });
 
-    const rawHtml = elementsToCapture.map(n => n.outerHTML).join('');
-    
-    const data = `
-        <svg xmlns="http://www.w3.org/2000/svg" width="${state.canvasW}" height="${state.canvasH}">
-            <foreignObject width="100%" height="100%">
-                <div xmlns="http://www.w3.org/1999/xhtml" style="width:${state.canvasW}px; height:${state.canvasH}px; background-color:${state.bgColor}; position:relative; overflow:hidden;">
-                    ${rawHtml}
-                </div>
-            </foreignObject>
-        </svg>
-    `;
-    
-    // THE FIX: Use an encoded Data URI instead of a Blob ObjectURL.
-    const url = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(data);
-    
-    const img = new Image();
-    // Do not use crossOrigin="Anonymous" for Data URIs
-    img.onerror = () => {
-        console.error("Failed to load SVG data as an image.");
-        alert("A browser error occurred during SVG rendering. Please ensure you are not using external images.");
-    };
-    img.onload = () => {
-        const tempCanvas = document.createElement('canvas');
-        tempCanvas.width = state.canvasW * 2;
-        tempCanvas.height = state.canvasH * 2;
-        const ctx = tempCanvas.getContext('2d');
-        ctx.scale(2, 2);
-        
-        ctx.fillStyle = state.bgColor === 'transparent' ? '#ffffff' : state.bgColor;
-        ctx.fillRect(0, 0, state.canvasW, state.canvasH);
-        
-        ctx.drawImage(img, 0, 0);
-        
-        try {
-            const a = document.createElement('a');
-            const fileExt = format === 'jpeg' ? 'jpg' : format;
-            a.download = `flyer_export.${fileExt}`;
-            a.href = tempCanvas.toDataURL(`image/${format}`, 1.0);
-            a.click();
-        } catch (err) {
-            console.error("Canvas export failed at toDataURL. You might have external images that aren't Base64.", err);
-            alert("Export failed due to a strict CORS policy. Ensure all images used are uploaded directly from your computer.");
+        function hideLoading() {
+            document.getElementById('export-loader').style.display = 'none';
         }
-        
-        state.grid = currentGrid;
-        renderCanvas();
-    };
-    img.src = url;
+
+// --- 1. ROBUST IMAGE-TO-BASE64 CONVERTER ---
+async function fetchImageAsBase64(url) {
+    if (!url || url.startsWith('data:')) return url;
+    try {
+        // public proxy to bypass CORS
+        const proxyUrl = 'https://corsproxy.io/?' + encodeURIComponent(url);
+        const response = await fetch(proxyUrl);
+        if (!response.ok) throw new Error('CORS proxy failed');
+        const blob = await response.blob();
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onloadend = () => resolve(reader.result);
+            reader.onerror = reject;
+            reader.readAsDataURL(blob);
+        });
+    } catch (e) {
+        console.warn("Proxy failed for:", url, e);
+        return url; // Fallback to original
+    }
 }
 
-// --- UPDATED EXPORT TO PDF (Direct Download, fixes text positioning and CORS) ---
-function exportToPDF() {
-    if (!window.jspdf) {
-        alert("The jsPDF library is missing. Please add it to your <head> to download PDFs directly.");
-        return;
-    }
+// --- 2. FIXED EXPORT FUNCTION ---
+async function exportToImage(format) {
+    // A. Show a simple alert so the user knows it's working (it takes a few seconds)
+    console.log("Starting export...");
+    showLoading(`GENERATING ${format.toUpperCase()}...`);
+    
+    // B. Create a temporary "Clean Clone" of the flyer
+    const clone = canvasEl.cloneNode(true);
+    
+    // C. REMOVE UI: Find and delete the handles/overlays inside the clone
+    const overlay = clone.querySelector('#selection-overlay');
+    if (overlay) overlay.remove();
 
-    selectionOverlay.style.display = 'none';
-    const currentGrid = state.grid;
-    state.grid = false;
-    renderCanvas();
-
-    // Fix for Positioning: Convert all dynamic positioning to absolute pixel values
-    const elementsToCapture = [];
-    Array.from(canvasEl.childNodes).forEach(node => {
-        if (node.id === 'selection-overlay') return;
-        if (node.nodeType === 1) { 
-            const clone = node.cloneNode(true);
-            const rect = node.getBoundingClientRect();
-            const canvasRect = canvasEl.getBoundingClientRect();
+    // --- TEXT WRAP & SPACING FIX FOR HTML2CANVAS ---
+    const textElements = clone.querySelectorAll('.canvas-element');
+    textElements.forEach(el => {
+        const stateEl = state.elements.find(e => 'el-' + e.id === el.id);
+        if (stateEl && stateEl.type === 'text') {
+            // 1. Add a 5px safety buffer to prevent unwanted line breaks 
+            // (Doesn't affect visual alignment, just gives the canvas room to breathe)
+            const currentWidth = parseFloat(el.style.width);
+            el.style.width = (currentWidth + 5) + 'px';
             
-            clone.style.left = `${rect.left - canvasRect.left}px`;
-            clone.style.top = `${rect.top - canvasRect.top}px`;
-            clone.style.position = 'absolute';
-            clone.style.transform = 'none';
-            clone.style.margin = '0';
+            // 2. Lock the line-height to exact pixels from the live DOM
+            // This stops vertical text from collapsing or spreading out weirdly
+            const originalNode = document.getElementById(el.id);
+            if (originalNode) {
+                const computedStyle = window.getComputedStyle(originalNode);
+                el.style.lineHeight = computedStyle.lineHeight;
+            }
             
-            elementsToCapture.push(clone);
+            // 3. Remove aggressive wrapping rules that html2canvas struggles with
+            el.style.wordBreak = 'normal';
+            el.style.overflowWrap = 'break-word'; 
         }
     });
-
-    const rawHtml = elementsToCapture.map(n => n.outerHTML).join('');
-                        
-    const data = `
-        <svg xmlns="http://www.w3.org/2000/svg" width="${state.canvasW}" height="${state.canvasH}">
-            <foreignObject width="100%" height="100%">
-                <div xmlns="http://www.w3.org/1999/xhtml" style="width:${state.canvasW}px; height:${state.canvasH}px; background-color:${state.bgColor}; position:relative; overflow:hidden;">
-                    ${rawHtml}
-                </div>
-            </foreignObject>
-        </svg>
-    `;
+    // --- END TEXT FIX ---
     
-    // THE FIX: Use an encoded Data URI instead of a Blob ObjectURL.
-    const url = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(data);
+    // D. REMOVE GRID: Ensure the clone has no background grid
+    clone.style.backgroundImage = 'none';
+    clone.style.backgroundColor = state.bgColor;
     
-    const img = new Image();
-    img.onerror = () => {
-        console.error("Failed to load SVG data as an image for PDF.");
-        alert("A browser error occurred during SVG rendering. Please ensure you are not using external images.");
-    };
-    img.onload = () => {
-        const tempCanvas = document.createElement('canvas');
-        tempCanvas.width = state.canvasW * 2;
-        tempCanvas.height = state.canvasH * 2;
-        const ctx = tempCanvas.getContext('2d');
-        ctx.scale(2, 2);
-        
-        ctx.fillStyle = state.bgColor === 'transparent' ? '#ffffff' : state.bgColor;
-        ctx.fillRect(0, 0, state.canvasW, state.canvasH);
-        ctx.drawImage(img, 0, 0);
+    // E. Fix Dimensions: Force the clone to be exactly the template size
+    clone.style.width = state.canvasW + 'px';
+    clone.style.height = state.canvasH + 'px';
+    clone.style.position = 'absolute';
+    clone.style.top = '-10000px'; // Hide it from the user's view
+    clone.style.left = '-10000px';
+    clone.style.transform = 'none'; // Reset any scaling
+    document.body.appendChild(clone);
 
-        try {
-            const imgData = tempCanvas.toDataURL('image/jpeg', 1.0);
-            const { jsPDF } = window.jspdf;
-            
-            const orientation = state.canvasW > state.canvasH ? 'landscape' : 'portrait';
-            const pdf = new jsPDF({
-                orientation: orientation,
-                unit: 'px',
-                format: [state.canvasW, state.canvasH]
-            });
-
-            pdf.addImage(imgData, 'JPEG', 0, 0, state.canvasW, state.canvasH);
-            pdf.save('flyer_export.pdf');
-        } catch (err) {
-            console.error("PDF export failed.", err);
-            alert("Export failed due to a strict CORS policy. Ensure all images used are uploaded directly from your computer.");
+    // F. SWAP S3 IMAGES: Check both <img> tags and background-images
+    const allImgs = clone.querySelectorAll('img');
+    for (let img of allImgs) {
+        if (img.src.includes('amazonaws.com')) {
+            img.src = await fetchImageAsBase64(img.src);
         }
+    }
+    
+    const allShapes = clone.querySelectorAll('.canvas-element');
+    for (let shape of allShapes) {
+        const bg = shape.style.backgroundImage;
+        if (bg && bg.includes('amazonaws.com')) {
+            const urlMatch = bg.match(/url\(["']?(.*?)["']?\)/);
+            if (urlMatch && urlMatch[1]) {
+                const b64 = await fetchImageAsBase64(urlMatch[1]);
+                shape.style.backgroundImage = `url("${b64}")`;
+            }
+        }
+    }
 
-        state.grid = currentGrid;
-        renderCanvas();
-    };
-    img.src = url;
+    try {
+        // G. Wait for fonts to be ready so text doesn't move
+        await document.fonts.ready;
+        await new Promise(r => setTimeout(r, 300)); // Hard delay for repainting
+
+        const capture = await html2canvas(clone, {
+            scale: 2, 
+            useCORS: true,
+            allowTaint: false,
+            letterRendering:true,
+            backgroundColor: (state.bgColor === 'transparent' || !state.bgColor) ? '#ffffff' : state.bgColor,
+            width: state.canvasW,
+            height: state.canvasH,
+            scrollX: 0,
+            scrollY: 0,
+            logging: false
+        });
+
+        const mimeType = format === 'jpeg' ? 'image/jpeg' : 'image/png';
+        const fileExt = format === 'jpeg' ? 'jpg' : 'png';
+        
+        const a = document.createElement('a');
+        a.download = `flyer_export.${fileExt}`;
+        a.href = capture.toDataURL(mimeType, 1.0);
+        a.click();
+
+    } catch (err) {
+        console.error("Export Error:", err);
+        alert("Export failed. Check console for details.");
+    } finally {
+        // H. Cleanup the invisible clone
+        document.body.removeChild(clone);
+        hideLoading(); // Always hide spinner, even on error
+    }
+}
+
+async function exportToPDF() {
+    if (!window.jspdf) return alert("jsPDF missing");
+    showLoading("PREPARING PDF...");
+    
+    const clone = canvasEl.cloneNode(true);
+    const overlay = clone.querySelector('#selection-overlay');
+    if (overlay) overlay.remove();
+
+    // --- TEXT WRAP & SPACING FIX FOR HTML2CANVAS ---
+    const textElements = clone.querySelectorAll('.canvas-element');
+    textElements.forEach(el => {
+        const stateEl = state.elements.find(e => 'el-' + e.id === el.id);
+        if (stateEl && stateEl.type === 'text') {
+            // 1. Add a 5px safety buffer to prevent unwanted line breaks 
+            // (Doesn't affect visual alignment, just gives the canvas room to breathe)
+            const currentWidth = parseFloat(el.style.width);
+            el.style.width = (currentWidth + 5) + 'px';
+            
+            // 2. Lock the line-height to exact pixels from the live DOM
+            // This stops vertical text from collapsing or spreading out weirdly
+            const originalNode = document.getElementById(el.id);
+            if (originalNode) {
+                const computedStyle = window.getComputedStyle(originalNode);
+                el.style.lineHeight = computedStyle.lineHeight;
+            }
+            
+            // 3. Remove aggressive wrapping rules that html2canvas struggles with
+            el.style.wordBreak = 'normal';
+            el.style.overflowWrap = 'break-word'; 
+        }
+    });
+    // --- END TEXT FIX ---
+    clone.style.backgroundImage = 'none';
+    clone.style.width = state.canvasW + 'px';
+    clone.style.height = state.canvasH + 'px';
+    clone.style.position = 'absolute';
+    clone.style.top = '-10000px';
+    document.body.appendChild(clone);
+
+    try {
+        await document.fonts.ready;
+        const capture = await html2canvas(clone, {
+            scale: 2, // Higher quality for PDF printing
+            useCORS: true,
+            width: state.canvasW,
+            height: state.canvasH
+        });
+
+        const { jsPDF } = window.jspdf;
+        const orientation = state.canvasW > state.canvasH ? 'landscape' : 'portrait';
+        const pdf = new jsPDF({
+            orientation: orientation,
+            unit: 'px',
+            format: [state.canvasW, state.canvasH]
+        });
+
+        pdf.addImage(capture.toDataURL('image/jpeg', 1.0), 'JPEG', 0, 0, state.canvasW, state.canvasH);
+        pdf.save('flyer_export.pdf');
+    } finally {
+        document.body.removeChild(clone);
+        hideLoading(); // Always hide spinner
+    }
 }
         
         window.addEventListener('load', autoFitMobile);
-        window.addEventListener('resize', autoFitMobile);
+        
+        window.addEventListener('resize', () => {
+            fitToScreen();
+        });
 
     </script>
+    <div id="export-loader" class="modal-overlay" style="display: none; flex-direction: column; gap: 20px;">
+        <div class="spinner"></div>
+        <div id="loader-text" style="color: white; font-size: 16px; font-weight: 500; letter-spacing: 0.05em;">PROCESSING EXPORT...</div>
+    </div>
 </body>
 
 </html>
