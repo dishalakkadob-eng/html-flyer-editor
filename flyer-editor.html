@@ -1010,47 +1010,73 @@
                     const fit = el.objectFit || 'fill';
                     node.innerHTML = `<img src="${el.content}" draggable="false" style="width:100%; height:100%; display:block; object-fit:${fit}; border-radius:${el.radius}px; filter: brightness(${1 + el.filters.b}) contrast(${1 + el.filters.c}) saturate(${1 + el.filters.s}) blur(${el.filters.bl}px); box-shadow: ${el.shadow.x}px ${el.shadow.y}px ${el.shadow.bl}px ${el.shadow.c}; pointer-events:none;"/>`;
                 } else if (el.type === 'svg') {
-                    node.innerHTML = DOMSanitizer.sanitize(el.content);
+                    // FIX 1: pointer-events:none on the content wrapper KILLS native text-selection.
+                    // The drag-catcher now cleanly absorbs all clicks for the JS engine!
+                    node.innerHTML = `
+                        <div style="position:absolute; top:0; left:0; right:0; bottom:0; z-index:10; cursor:move; background:rgba(255,255,255,0.001);" class="drag-catcher"></div>
+                        <div class="svg-content-wrapper" style="width:100%; height:100%; display:flex; align-items:center; justify-content:center; pointer-events:none;">
+                            ${DOMSanitizer.sanitize(el.content)}
+                        </div>
+                    `;
 
-                    if (node.firstElementChild) {
-                        node.firstElementChild.style.pointerEvents = 'none';
-                    }
+                    node.ondragstart = () => false;
 
-                    // Support for Font-based Icons (FontAwesome / Material)
-                    if (el.fill) node.style.color = el.fill;
+                    const contentWrapper = node.querySelector('.svg-content-wrapper');
+                    const svg = contentWrapper.querySelector('svg');
+                    const iTag = contentWrapper.querySelector('i') || contentWrapper.querySelector('[class*="fa-"]');
 
-                    const svg = node.querySelector('svg');
                     if (svg) {
-                        // REQUIRED: Force the SVG to ignore its internal aspect ratio and stretch
-                        svg.setAttribute('preserveAspectRatio', 'none'); 
-                        
-                        // Ensure it fills the resized canvas element box
+                       
+                        svg.setAttribute('preserveAspectRatio', 'none');
+                        if (!svg.getAttribute('viewBox')) {
+                            const w = parseFloat(svg.getAttribute('width')) || el.w;
+                            const h = parseFloat(svg.getAttribute('height')) || el.h;
+                            svg.setAttribute('viewBox', `0 0 ${w} ${h}`);
+                        }
                         svg.style.width = '100%'; 
                         svg.style.height = '100%'; 
                         svg.style.display = 'block';
-                        
-                        // Apply Fill and Stroke properties
-                        if (el.fill) {
-                            svg.style.fill = el.fill;
-                            svg.querySelectorAll('path, circle, rect, polygon, ellipse').forEach(path => {
-                                path.setAttribute('fill', el.fill);
-                                path.style.fill = el.fill;
-                            });
-                        }
-                        if (el.stroke) {
-                            svg.style.stroke = el.stroke;
-                            svg.querySelectorAll('path, circle, rect, polygon, ellipse').forEach(path => {
-                                path.setAttribute('stroke', el.stroke);
-                                path.style.stroke = el.stroke;
-                            });
-                        }
-                        if (el.strokeWidth !== undefined) {
-                            svg.style.strokeWidth = el.strokeWidth + 'px';
-                            svg.querySelectorAll('path, circle, rect, polygon, ellipse').forEach(path => {
-                                path.setAttribute('stroke-width', el.strokeWidth);
-                            });
+                        svg.style.overflow = 'visible';
+                    } else if (iTag) {
+                        // FIX 2: Correct scaling and deep color injection for nested FontAwesome DOM structures
+                        const maxDim = Math.max(el.w, el.h);
+                        const scaleX = el.w / maxDim;
+                        const scaleY = el.h / maxDim;
+
+                        // Grab the root element of the imported icon (e.g., the <div class="fa-wrap">)
+                        const importedRoot = contentWrapper.firstElementChild;
+                        if (importedRoot) {
+                            importedRoot.style.display = 'flex';
+                            importedRoot.style.alignItems = 'center';
+                            importedRoot.style.justifyContent = 'center';
+                            importedRoot.style.width = '100%';
+                            importedRoot.style.height = '100%';
+                            importedRoot.style.margin = '0';
+                            importedRoot.style.padding = '0';
+                            
+                            // Override the original inline font-size (e.g., the 50px from your screenshot)
+                            importedRoot.style.fontSize = maxDim + 'px';
+                            importedRoot.style.setProperty('font-size', maxDim + 'px', 'important');
+                            
+                            importedRoot.style.transform = `scale(${scaleX}, ${scaleY})`;
+                            importedRoot.style.transformOrigin = 'center';
+
+                            if (el.fill) {
+                                // Apply color to the root
+                                importedRoot.style.color = el.fill;
+                                importedRoot.style.setProperty('color', el.fill, 'important');
+                                
+                                // FIX 3: Deep color override! 
+                                // Forces the inner <span> to accept the new color too
+                                importedRoot.querySelectorAll('*').forEach(child => {
+                                    child.style.color = el.fill;
+                                    child.style.setProperty('color', el.fill, 'important');
+                                });
+                            }
                         }
                     }
+
+
                 } else if (el.type === 'shape') {
                     // NEW: Handles gradients, transparent boxes, and borders
                     node.style.backgroundColor = el.bgColor;
@@ -1135,6 +1161,7 @@
                 } else if (selEl.type === 'svg') {
                     dragStartObj.minWidth = 25; 
                     dragStartObj.minHeight = 25;
+                    
                 } else {
                     dragStartObj.minWidth = 10;
                     dragStartObj.minHeight = 10;
@@ -1392,53 +1419,69 @@
                 const container = document.getElementById('svg-color-container');
                 container.innerHTML = ''; 
 
-                const colors = getUniqueSvgColors(el.content);
+                const colors = getUniqueSvgColors(el.content, el.fill);
                 
                 colors.forEach(color => {
-                    // Wrapper for the bubble and the hidden input
                     const wrapper = document.createElement('div');
                     wrapper.style.position = 'relative';
                     wrapper.style.width = '30px';
                     wrapper.style.height = '30px';
 
-                    // The visible bubble (swatch)
                     const swatch = document.createElement('div');
-                    swatch.style.cssText = `
-                        width: 100%; height: 100%; border-radius: 50%; 
-                        background: ${color}; cursor: pointer; border: 2px solid #fff;
-                        box-shadow: 0 0 0 1px var(--border);
-                    `;
+                    swatch.style.cssText = `width: 100%; height: 100%; border-radius: 50%; background: ${color}; cursor: pointer; border: 2px solid #fff; box-shadow: 0 0 0 1px var(--border);`;
 
-                    // The hidden color input (positioned behind the bubble)
                     const input = document.createElement('input');
                     input.type = 'color';
                     input.value = color;
-                    // FIX: Positioned absolute behind the swatch so the popup anchors nearby
-                    input.style.cssText = `
-                        position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-                        opacity: 0; pointer-events: none;
-                    `;
+                    input.style.cssText = `position: absolute; top: 0; left: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer;`;
 
-                    swatch.onclick = () => input.click();
-                    
-                    // FIX: Use 'oninput' for live updates as the user drags the picker
+                    let currentSwatchColor = color;
+
                     input.oninput = (e) => {
-                        replaceSvgColor(el, color, e.target.value);
+                        const newColor = e.target.value.toUpperCase();
+                        el.fill = newColor; 
+
+                        if (el.content.includes('<svg')) {
+                            const parser = new DOMParser();
+                            const doc = parser.parseFromString(el.content, 'image/svg+xml');
+                            
+                            doc.querySelectorAll('*').forEach(n => {
+                                // Replace ONLY the specific color being scrubbed
+                                ['fill', 'stroke'].forEach(attr => {
+                                    if (normalizeToHex(n.getAttribute(attr)) === currentSwatchColor) {
+                                        n.setAttribute(attr, newColor);
+                                    }
+                                    if (normalizeToHex(n.style[attr]) === currentSwatchColor) {
+                                        n.style[attr] = newColor;
+                                    }
+                                });
+
+                                // If the user is editing the Black bubble, apply it to uncolored paths
+                                if (currentSwatchColor === '#000000' && ['path', 'rect', 'circle', 'polygon', 'ellipse'].includes(n.tagName.toLowerCase())) {
+                                    if (!n.getAttribute('fill') && !n.style.fill && !n.getAttribute('stroke') && !n.style.stroke) {
+                                        n.setAttribute('fill', newColor);
+                                    }
+                                }
+                            });
+                            
+                            el.content = new XMLSerializer().serializeToString(doc);
+                        }
+
+                        currentSwatchColor = newColor; 
+                        swatch.style.background = newColor; // Updates the UI bubble instantly
+                        renderCanvas();
                     };
                     
-                    // Save history only when the user finishes picking a color
                     input.onchange = () => {
                         saveHistory();
-                        updatePanel(); // Refresh swatches with new values
+                        // FIX: We specifically DO NOT call updatePanel() here anymore!
+                        // This prevents the color picker from closing or stuttering after 1 click.
                     };
 
                     wrapper.appendChild(swatch);
                     wrapper.appendChild(input);
                     container.appendChild(wrapper);
                 });
-
-                const swInput = document.getElementById('prop-svgstrokewidth');
-                if (swInput) swInput.value = el.strokeWidth || 0;
             }
         }
 
@@ -1661,7 +1704,6 @@
             input.value = '';
         }
 
-        // 2. Replace existing SVG
         function replaceSvgFile(input) {
             const el = getSelectedElement(); 
             if (!el || el.type !== 'svg' || !input.files.length) return;
@@ -1677,11 +1719,46 @@
             const reader = new FileReader(); 
             reader.onload = e => { 
                 el.content = e.target.result; 
+                el.originalContent = e.target.result; // Saves the new file as the baseline
+                el.fill = ''; // Resets any global HTML font colors
+                
                 renderCanvas(); 
                 saveHistory(); 
+                updatePanel(); 
             };
             reader.readAsText(file); 
             input.value = '';
+        }
+
+        // Replaces SVG colors or Native Font colors without crashing
+        function replaceSvgColor(el, oldColor, newColor, refreshPanel = true) {
+            if (el.content.includes('<svg')) {
+                const parser = new DOMParser();
+                const doc = parser.parseFromString(el.content, 'image/svg+xml');
+                const elements = doc.querySelectorAll('*');
+
+                elements.forEach(node => {
+                    ['fill', 'stroke'].forEach(attr => {
+                        if (normalizeToHex(node.getAttribute(attr)) === oldColor) {
+                            node.setAttribute(attr, newColor);
+                        }
+                        if (normalizeToHex(node.style[attr]) === oldColor) {
+                            node.style[attr] = newColor;
+                        }
+                    });
+                });
+                el.content = new XMLSerializer().serializeToString(doc);
+            } else {
+                // It's an HTML Icon, just force the fill
+                el.fill = newColor;
+            }
+            
+            renderCanvas();
+            
+            if (refreshPanel) {
+                saveHistory();
+                updatePanel(); 
+            }
         }
 
         // 3. Open raw code modal and populate it with the current SVG
@@ -1701,26 +1778,39 @@
             return ctx.fillStyle.toUpperCase();
         }
 
-        // Extracts all unique fill and stroke colors from SVG markup
-        function getUniqueSvgColors(svgMarkup) {
+       
+        // Extracts all unique colors, with a fallback for monochrome icons
+        function getUniqueSvgColors(svgMarkup, defaultFill) {
             const parser = new DOMParser();
             const doc = parser.parseFromString(svgMarkup, 'image/svg+xml');
             const colors = new Set();
 
-            const elements = doc.querySelectorAll('*');
-            elements.forEach(el => {
-                // Check attributes
-                ['fill', 'stroke'].forEach(attr => {
-                const attrVal = el.getAttribute(attr);
-                const hex = normalizeToHex(attrVal);
-                if (hex) colors.add(hex);
-                
-                // Also check inline styles (style="fill:...")
-                const styleVal = el.style[attr];
-                const styleHex = normalizeToHex(styleVal);
-                if (styleHex) colors.add(styleHex);});
+            if (!doc.querySelector('parsererror')) {
+                const elements = doc.querySelectorAll('*');
+                elements.forEach(el => {
+                    ['fill', 'stroke'].forEach(attr => {
+                        const hex1 = normalizeToHex(el.getAttribute(attr));
+                        if (hex1) colors.add(hex1);
+                        
+                        const hex2 = normalizeToHex(el.style[attr]);
+                        if (hex2) colors.add(hex2);
+                    });
+
+                    // FIX 2: Add Black ONLY if a shape has absolutely no color defined
+                    if (['path', 'rect', 'circle', 'polygon', 'ellipse'].includes(el.tagName.toLowerCase())) {
+                        if (!el.getAttribute('fill') && !el.style.fill && !el.getAttribute('stroke') && !el.style.stroke) {
+                            colors.add('#000000');
+                        }
+                    }
                 });
-                return Array.from(colors);
+            }
+
+            if (colors.size === 0) {
+                const hex = normalizeToHex(defaultFill) || '#000000';
+                colors.add(hex);
+            }
+
+            return Array.from(colors);
         }
 
         // Replaces every instance of an old color with a new color in the SVG string
@@ -1888,29 +1978,66 @@
                     });
                     return; // Img has no valid children, stop traversal here
                 }
-
-                if (isIconWrap || tag === 'svg') {
+                if (isIconWrap || tag === 'svg' || tag === 'i') {
+                    // 1. Try to find an actual SVG element
+                    let actualSvg = tag === 'svg' ? node : node.querySelector('svg');
                     
-                    // FIX: Clone the element and strip absolute positioning so it doesn't double-offset!
-                    const clone = node.cloneNode(true);
-                    clone.style.position = 'static'; // Forces it to reset to 0,0 inside our canvas element
-                    clone.style.left = 'auto';
-                    clone.style.top = 'auto';
-                    clone.style.margin = '0';
-                    clone.style.transform = 'none';
+                    // 2. DIMENSION FIX: If the icon hasn't loaded yet, it might report 0px. 
+                    let finalW = rect.width > 0 ? rect.width : 25; 
+                    let finalH = rect.height > 0 ? rect.height : 25;
 
-                    // Ensure true SVGs fill the canvas element box
-                    if (tag === 'svg') {
-                        clone.style.width = '100%';
-                        clone.style.height = '100%';
+                    if (actualSvg) {
+                        // --- CASE A: IT IS A REAL SVG (Like the Clapperboard) ---
+                        let computedColor = window.getComputedStyle(actualSvg).color;
+                        if (!computedColor || computedColor === 'rgba(0, 0, 0, 0)') computedColor = '#333333';
+                        
+                        const hexColor = rgbToHex(computedColor).toUpperCase();
+                        const cloneSvg = actualSvg.cloneNode(true);
+                        
+                        cloneSvg.setAttribute('width', '100%');
+                        cloneSvg.setAttribute('height', '100%');
+                        cloneSvg.style.display = 'block';
+                        cloneSvg.style.visibility = 'visible';
+                        cloneSvg.style.opacity = '1';
+                        cloneSvg.style.position = 'relative';
+                        cloneSvg.style.top = '0';
+                        cloneSvg.style.left = '0';
+
+                        cloneSvg.querySelectorAll('path, rect, circle, polygon').forEach(shape => {
+                            shape.setAttribute('fill', hexColor);
+                            shape.style.fill = hexColor;
+                            shape.style.visibility = 'visible';
+                        });
+
+                        state.elements.push({ 
+                            id: crypto.randomUUID(), type: 'svg', content: cloneSvg.outerHTML, originalContent: cloneSvg.outerHTML,
+                            x: elX, y: elY, w: finalW, h: finalH, 
+                            angle: 0, opacity: op, zIndex: zIndex, fill: hexColor, stroke: '' 
+                        });
+                        return; 
+                    } else if (tag === 'i' || (node.className && typeof node.className === 'string' && (node.className.includes('fa-') || node.className.includes('icon')))) {
+                        // --- CASE B: IT IS A FONT-ICON (Like <i class="fa fa-phone"></i>) ---
+                        // Instead of extracting text, we inject the raw HTML so FontAwesome renders it natively!
+                        let computedColor = window.getComputedStyle(node).color;
+                        if (!computedColor || computedColor === 'rgba(0, 0, 0, 0)') computedColor = '#333333';
+                        const hexColor = rgbToHex(computedColor).toUpperCase();
+
+                        const cloneIcon = node.cloneNode(true);
+                        cloneIcon.style.position = 'static';
+                        cloneIcon.style.margin = '0';
+                        cloneIcon.style.display = 'block';
+                        cloneIcon.style.width = '100%';
+                        cloneIcon.style.height = '100%';
+
+                        state.elements.push({ 
+                            // We use 'svg' type because your engine natively applies el.fill to node.style.color for HTML icons!
+                            id: crypto.randomUUID(), type: 'svg', 
+                            content: cloneIcon.outerHTML, originalContent: cloneIcon.outerHTML,
+                            x: elX, y: elY, w: finalW, h: finalH, 
+                            angle: 0, opacity: op, zIndex: zIndex, fill: hexColor, stroke: '' 
+                        });
+                        return;
                     }
-
-                    state.elements.push({ 
-                        id: crypto.randomUUID(), type: 'svg', content: clone.outerHTML, originalContent: clone.outerHTML,
-                        x: elX, y: elY, w: elW || 50, h: elH || 50, 
-                        angle: 0, opacity: op, zIndex: zIndex, fill: '', stroke: '' 
-                    });
-                    return; // Successfully grabbed the container, skip traversing children
                 }
 
                 // --- C. Handle Leaf Text Blocks ---
@@ -2064,30 +2191,57 @@ async function exportToImage(format) {
     const overlay = clone.querySelector('#selection-overlay');
     if (overlay) overlay.remove();
 
-    // --- TEXT WRAP & SPACING FIX FOR HTML2CANVAS ---
+    // --- SMART TEXT WRAP FIX FOR HTML2CANVAS ---
     const textElements = clone.querySelectorAll('.canvas-element');
     textElements.forEach(el => {
         const stateEl = state.elements.find(e => 'el-' + e.id === el.id);
         if (stateEl && stateEl.type === 'text') {
-            // 1. Add a 5px safety buffer to prevent unwanted line breaks 
-            // (Doesn't affect visual alignment, just gives the canvas room to breathe)
-            const currentWidth = parseFloat(el.style.width);
-            el.style.width = (currentWidth + 5) + 'px';
-            
-            // 2. Lock the line-height to exact pixels from the live DOM
-            // This stops vertical text from collapsing or spreading out weirdly
             const originalNode = document.getElementById(el.id);
-            if (originalNode) {
-                const computedStyle = window.getComputedStyle(originalNode);
-                el.style.lineHeight = computedStyle.lineHeight;
-            }
+            if (!originalNode) return;
+
+            const computedStyle = window.getComputedStyle(originalNode);
+            const fontSize = parseFloat(computedStyle.fontSize);
+            const currentWidth = parseFloat(el.style.width);
             
-            // 3. Remove aggressive wrapping rules that html2canvas struggles with
-            el.style.wordBreak = 'normal';
-            el.style.overflowWrap = 'break-word'; 
+            // 1. Lock line-height to prevent vertical stretching
+            el.style.lineHeight = computedStyle.lineHeight;
+            
+            // 2. Fix the aggressive wrap rule for html2canvas compatibility
+            el.style.wordBreak = 'break-word';
+            el.style.overflowWrap = 'break-word';
+
+            // 3. Detect if the text is currently occupying only a single line
+            const lineHeight = parseFloat(computedStyle.lineHeight) || (fontSize * 1.2);
+            // If the scroll height is roughly equal to one line height, it's a single line
+            const isSingleLine = originalNode.scrollHeight <= (lineHeight + 5);
+
+            if (isSingleLine) {
+                // FIX FOR SINGLE-LINE TEXT: 
+                // Force it to never wrap and give it plenty of sub-pixel breathing room
+                el.style.whiteSpace = 'nowrap';
+                el.style.width = (currentWidth + 10) + 'px'; 
+            } else {
+                // MULTI-LINE LOGIC
+                // Check if it's "Vertical Text" (width is very narrow)
+                if (currentWidth <= (fontSize * 1.8)) {
+                    // FORCE html2canvas to break mid-word
+                    el.style.wordBreak = 'break-all';
+                    el.style.overflowWrap = 'anywhere';
+                    el.style.whiteSpace = 'pre-wrap';
+                    
+                    // Strictly lock the width so html2canvas cannot expand it
+                    el.style.width = currentWidth + 'px';
+                    el.style.minWidth = currentWidth + 'px';
+                    el.style.maxWidth = currentWidth + 'px';
+                } else {
+                    // Standard multi-line paragraph
+                    el.style.width = (currentWidth + 1) + 'px';
+                }
+            
+            }
         }
     });
-    // --- END TEXT FIX ---
+    // --- END SMART TEXT FIX ---
     
     // D. REMOVE GRID: Ensure the clone has no background grid
     clone.style.backgroundImage = 'none';
@@ -2166,30 +2320,57 @@ async function exportToPDF() {
     const overlay = clone.querySelector('#selection-overlay');
     if (overlay) overlay.remove();
 
-    // --- TEXT WRAP & SPACING FIX FOR HTML2CANVAS ---
+    // --- SMART TEXT WRAP FIX FOR HTML2CANVAS ---
     const textElements = clone.querySelectorAll('.canvas-element');
     textElements.forEach(el => {
         const stateEl = state.elements.find(e => 'el-' + e.id === el.id);
         if (stateEl && stateEl.type === 'text') {
-            // 1. Add a 5px safety buffer to prevent unwanted line breaks 
-            // (Doesn't affect visual alignment, just gives the canvas room to breathe)
-            const currentWidth = parseFloat(el.style.width);
-            el.style.width = (currentWidth + 5) + 'px';
-            
-            // 2. Lock the line-height to exact pixels from the live DOM
-            // This stops vertical text from collapsing or spreading out weirdly
             const originalNode = document.getElementById(el.id);
-            if (originalNode) {
-                const computedStyle = window.getComputedStyle(originalNode);
-                el.style.lineHeight = computedStyle.lineHeight;
-            }
+            if (!originalNode) return;
+
+            const computedStyle = window.getComputedStyle(originalNode);
+            const fontSize = parseFloat(computedStyle.fontSize);
+            const currentWidth = parseFloat(el.style.width);
             
-            // 3. Remove aggressive wrapping rules that html2canvas struggles with
-            el.style.wordBreak = 'normal';
-            el.style.overflowWrap = 'break-word'; 
+            // 1. Lock line-height to prevent vertical stretching
+            el.style.lineHeight = computedStyle.lineHeight;
+            
+            // 2. Fix the aggressive wrap rule for html2canvas compatibility
+            el.style.wordBreak = 'break-word';
+            el.style.overflowWrap = 'break-word';
+
+            // 3. Detect if the text is currently occupying only a single line
+            const lineHeight = parseFloat(computedStyle.lineHeight) || (fontSize * 1.2);
+            // If the scroll height is roughly equal to one line height, it's a single line
+            const isSingleLine = originalNode.scrollHeight <= (lineHeight + 5);
+
+            if (isSingleLine) {
+                // FIX FOR SINGLE-LINE TEXT: 
+                // Force it to never wrap and give it plenty of sub-pixel breathing room
+                el.style.whiteSpace = 'nowrap';
+                el.style.width = (currentWidth + 10) + 'px'; 
+            } else {
+                 // MULTI-LINE LOGIC
+                // Check if it's "Vertical Text" (width is very narrow)
+                if (currentWidth <= (fontSize * 1.8)) {
+                    // FORCE html2canvas to break mid-word
+                    el.style.wordBreak = 'break-all';
+                    el.style.overflowWrap = 'anywhere';
+                    el.style.whiteSpace = 'pre-wrap';
+                    
+                    // Strictly lock the width so html2canvas cannot expand it
+                    el.style.width = currentWidth + 'px';
+                    el.style.minWidth = currentWidth + 'px';
+                    el.style.maxWidth = currentWidth + 'px';
+                } else {
+                    // Standard multi-line paragraph
+                    el.style.width = (currentWidth + 1) + 'px';
+                }
+            }
         }
     });
-    // --- END TEXT FIX ---
+    // --- END SMART TEXT FIX ---
+
     clone.style.backgroundImage = 'none';
     clone.style.width = state.canvasW + 'px';
     clone.style.height = state.canvasH + 'px';
