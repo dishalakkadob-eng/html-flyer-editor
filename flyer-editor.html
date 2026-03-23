@@ -409,6 +409,19 @@
         #selection-overlay[data-selected-type="shape"] .handle {
             display: block;
         }
+
+      /* --- NEW: Locked Element Styling --- */
+        #selection-overlay.locked-overlay {
+            border-color: #ef4444 !important; /* Red border */
+        }
+        
+        /* Hide all resize handles and rotation controls when locked */
+        #selection-overlay.locked-overlay .handle,
+        #selection-overlay.locked-overlay .rotate-handle,
+        #selection-overlay.locked-overlay .rotate-line {
+            display: none !important; 
+        }
+
         .canvas-element {
             position: absolute;
             transform-origin: center;
@@ -425,6 +438,47 @@
             border-top-color: var(--primary); /* Uses your indigo theme color */
             border-radius: 50%;
             animation: spin 1s linear infinite;
+        }
+
+        /* --- NEW: Custom Context Menu --- */
+        .context-menu {
+            position: fixed;
+            background: var(--bg-panel);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+            padding: 5px 0;
+            min-width: 160px;
+            z-index: 999999;
+            display: none;
+            font-size: 13px;
+        }
+
+        .context-menu-item {
+            padding: 8px 15px;
+            cursor: pointer;
+            color: var(--text-main);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            transition: background 0.1s;
+        }
+
+        .context-menu-item:hover {
+            background: var(--primary-hover);
+            color: white;
+        }
+
+        .context-menu-item.disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+            pointer-events: none;
+        }
+
+        .context-menu-separator {
+            height: 1px;
+            background: var(--border);
+            margin: 4px 0;
         }
 
         @keyframes spin {
@@ -670,7 +724,7 @@
                     <div><label>Rotation (°)</label><input type="number" id="prop-angle" step="1"></div>
                     <div style="display:flex; align-items:center; padding-top:15px;">
                         <input type="checkbox" id="prop-lock" style="margin-right:5px; margin-top:0;"> <label>Lock
-                            Aspect</label>
+                            Element</label>
                     </div>
                 </div>
                 <div class="control-group">
@@ -678,10 +732,10 @@
                     <input type="range" id="prop-opacity" min="0" max="1" step="0.05">
                 </div>
                 <div class="control-group control-row" style="margin-top:20px;">
-                    <button onclick="bringForward()">↑ Fwd</button>
-                    <button onclick="sendBackward()">↓ Back</button>
-                    <button onclick="bringToFront()">⇈ Top</button>
-                    <button onclick="sendToBack()">⇊ Bot</button>
+                    <button id="btn-fwd" onclick="bringForward()">↑ Fwd</button>
+                    <button id="btn-back" onclick="sendBackward()">↓ Back</button>
+                    <button id="btn-top" onclick="bringToFront()">⇈ Top</button>
+                    <button id="btn-bot" onclick="sendToBack()">⇊ Bot</button>
                 </div>
                 <div class="control-group control-row">
                     <button onclick="duplicateSelected()">Duplicate</button>
@@ -823,7 +877,7 @@
                     onclick="applyRawSvg()">Update SVG</button></div>
         </div>
     </div>
-
+    <div id="custom-context-menu" class="context-menu"></div>
     <script>
         if (!window.crypto) window.crypto = {};
         if (!window.crypto.randomUUID) {
@@ -839,7 +893,7 @@
             history: [],
             historyIdx: -1,
             zoom: 1, panX: 0, panY: 0,
-            canvasW: 800, canvasH: 600,
+            canvasW: 650, canvasH: 800,
             bgColor: '#ffffff', grid: false
         };
 
@@ -1104,7 +1158,13 @@
                 selectionOverlay.style.width = selEl.w + 'px'; selectionOverlay.style.height = selEl.h + 'px';
                 selectionOverlay.style.transform = `rotate(${selEl.angle}deg)`;
                 selectionOverlay.setAttribute('data-selected-type', selEl.type);
-            } else { selectionOverlay.style.display = 'none';selectionOverlay.removeAttribute('data-selected-type'); }
+                // NEW: Apply red border if locked
+                if (selEl.locked) {
+                    selectionOverlay.classList.add('locked-overlay');
+                } else {
+                    selectionOverlay.classList.remove('locked-overlay');
+                }
+            } else { selectionOverlay.style.display = 'none';selectionOverlay.removeAttribute('data-selected-type');selectionOverlay.classList.remove('locked-overlay'); }
         }
 
         function getSelectedElement() { return state.elements.find(e => e.id === state.selectedId); }
@@ -1141,8 +1201,9 @@
 
             if (e.target.classList.contains('handle')) { 
                 const selEl = getSelectedElement();
+                if (selEl.locked) { e.preventDefault(); return;}
+                
                 const dir = e.target.dataset.dir;
-
                 if (selEl.type === 'text' && (dir === 'n' || dir === 's')) return; // Block vertical text resize
 
                 dragMode = dir;
@@ -1172,6 +1233,8 @@
             }
             
             if (e.target.classList.contains('rotate-handle')) { 
+                const selEl = getSelectedElement();
+                if (selEl.locked) { e.preventDefault(); return; }
                 dragMode = 'rotate'; dragStartObj = { ...getSelectedElement() }; e.preventDefault(); return; 
             }
 
@@ -1180,8 +1243,14 @@
                 const wasAlreadySelected = (state.selectedId === selectedId);
                 
                 selectElement(selectedId);
-                dragMode = 'move'; 
-                dragStartObj = { ...getSelectedElement() };
+                const selEl = getSelectedElement();
+                
+                // NEW: Only allow dragging if NOT locked
+                if (!selEl.locked) {
+                    dragMode = 'move'; 
+                    dragStartObj = { ...selEl };
+                }
+               
                 
                 // Track where they clicked to see if it's a drag or just a 2nd click
                 window.__clickPos = { x: e.clientX, y: e.clientY };
@@ -1341,6 +1410,14 @@
                 el.x = rx - w / 2; el.y = ry - h / 2; el.w = w; 
                 if (el.type !== 'text') el.h = h; 
             }
+            // --- 4. THE SAFE BOUNDARY CHECK ---
+            // This runs AFTER all calculations, ensuring 30 pixels remain visible 
+            // without breaking the scaling math or causing syntax errors.
+            const safeZone = 30;
+            if (el.x < -el.w + safeZone) el.x = -el.w + safeZone;
+            if (el.x > state.canvasW - safeZone) el.x = state.canvasW - safeZone;
+            if (el.y < -el.h + safeZone) el.y = -el.h + safeZone;
+            if (el.y > state.canvasH - safeZone) el.y = state.canvasH - safeZone;
             renderCanvas(); updatePanel();
         });
 
@@ -1379,6 +1456,42 @@
             const setV = (id, val) => { const node = document.getElementById(id); if (node) node.value = val; };
             setV('prop-x', Math.round(el.x)); setV('prop-y', Math.round(el.y)); setV('prop-w', Math.round(el.w)); setV('prop-h', Math.round(el.h));
             setV('prop-angle', Math.round(el.angle)); setV('prop-opacity', el.opacity);
+
+            const lockCb = document.getElementById('prop-lock');
+            if (lockCb) lockCb.checked = !!el.locked;
+
+            const panelControls = document.querySelectorAll('.properties-panel input, .properties-panel select, .properties-panel button');
+            panelControls.forEach(ctrl => {
+                // Disable everything EXCEPT the lock checkbox itself so we can unlock it later
+                if (ctrl.id !== 'prop-lock') {
+                    ctrl.disabled = !!el.locked;
+                }
+            });
+
+            // --- NEW: LAYER BUTTON DISABLING LOGIC ---
+            const btnFwd = document.getElementById('btn-fwd');
+            const btnTop = document.getElementById('btn-top');
+            const btnBack = document.getElementById('btn-back');
+            const btnBot = document.getElementById('btn-bot');
+
+            if (state.elements.length > 1 && btnFwd) {
+                // Find out if the selected element is at the very top or very bottom
+                const sortedElements = [...state.elements].sort((a, b) => a.zIndex - b.zIndex);
+                const isTop = el.id === sortedElements[sortedElements.length - 1].id;
+                const isBottom = el.id === sortedElements[0].id;
+
+                btnFwd.disabled = isTop;
+                btnTop.disabled = isTop;
+                btnBack.disabled = isBottom;
+                btnBot.disabled = isBottom;
+            } else if (btnFwd) {
+                // If there's only 1 element on the canvas, it can't move anywhere
+                btnFwd.disabled = true;
+                btnTop.disabled = true;
+                btnBack.disabled = true;
+                btnBot.disabled = true;
+            }
+            // --- END NEW LOGIC ---
 
             if (el.type === 'text') {
                 // --- FIXED FONT FAMILY DISPLAY ---
@@ -1427,6 +1540,9 @@
                     wrapper.style.width = '30px';
                     wrapper.style.height = '30px';
 
+                    if (el.locked) wrapper.style.pointerEvents = 'none';
+                    if (el.locked) wrapper.style.opacity = '0.5';
+
                     const swatch = document.createElement('div');
                     swatch.style.cssText = `width: 100%; height: 100%; border-radius: 50%; background: ${color}; cursor: pointer; border: 2px solid #fff; box-shadow: 0 0 0 1px var(--border);`;
 
@@ -1442,36 +1558,47 @@
                         el.fill = newColor; 
 
                         if (el.content.includes('<svg')) {
+                            // SAFETY FIX: Inject xmlns if missing to prevent <parsererror> corruption
+                            let safeContent = el.content;
+                            if (!safeContent.includes('xmlns=')) {
+                                safeContent = safeContent.replace('<svg', '<svg xmlns="http://www.w3.org/2000/svg"');
+                            }
+
                             const parser = new DOMParser();
-                            const doc = parser.parseFromString(el.content, 'image/svg+xml');
+                            const doc = parser.parseFromString(safeContent, 'image/svg+xml');
                             
-                            doc.querySelectorAll('*').forEach(n => {
-                                // Replace ONLY the specific color being scrubbed
+                            // Prevent saving if the parser still failed for some reason
+                            if (!doc.querySelector('parsererror')) {
+                                doc.querySelectorAll('*').forEach(n => {
                                 ['fill', 'stroke'].forEach(attr => {
                                     if (normalizeToHex(n.getAttribute(attr)) === currentSwatchColor) {
                                         n.setAttribute(attr, newColor);
                                     }
-                                    if (normalizeToHex(n.style[attr]) === currentSwatchColor) {
+                                    // SAFETY CHECK ADDED HERE
+                                    if (n.style && normalizeToHex(n.style[attr]) === currentSwatchColor) {
                                         n.style[attr] = newColor;
                                     }
                                 });
 
-                                // If the user is editing the Black bubble, apply it to uncolored paths
                                 if (currentSwatchColor === '#000000' && ['path', 'rect', 'circle', 'polygon', 'ellipse'].includes(n.tagName.toLowerCase())) {
-                                    if (!n.getAttribute('fill') && !n.style.fill && !n.getAttribute('stroke') && !n.style.stroke) {
+                                    // SAFETY CHECK ADDED HERE
+                                    const hasStyleFill = n.style && n.style.fill;
+                                    const hasStyleStroke = n.style && n.style.stroke;
+                                    
+                                    if (!n.getAttribute('fill') && !hasStyleFill && !n.getAttribute('stroke') && !hasStyleStroke) {
                                         n.setAttribute('fill', newColor);
                                     }
                                 }
-                            });
-                            
-                            el.content = new XMLSerializer().serializeToString(doc);
+                            });            
+                                el.content = new XMLSerializer().serializeToString(doc);
+                            }
                         }
 
                         currentSwatchColor = newColor; 
-                        swatch.style.background = newColor; // Updates the UI bubble instantly
+                        swatch.style.background = newColor; 
                         renderCanvas();
                     };
-                    
+
                     input.onchange = () => {
                         saveHistory();
                         // FIX: We specifically DO NOT call updatePanel() here anymore!
@@ -1508,24 +1635,239 @@
         bindProp('prop-saturation', 's', 'filters', true); bindProp('prop-blur', 'bl', 'filters', true);
         bindProp('prop-svgfill', 'fill'); bindProp('prop-svgstroke', 'stroke');bindProp('prop-svgstrokewidth', 'strokeWidth', null, true);
 
+        document.getElementById('prop-lock').addEventListener('change', function(e) {
+            const el = getSelectedElement();
+            if (el) {
+                el.locked = e.target.checked;
+                saveHistory();
+                renderCanvas();
+                updatePanel();
+            }
+        });
+
         function toggleBoolProp(key) { const el = getSelectedElement(); if (el) { el[key] = !el[key]; renderCanvas(); saveHistory(); updatePanel(); } }
         function setProp(key, val) { const el = getSelectedElement(); if (el) { el[key] = val; renderCanvas(); saveHistory(); } }
         function deleteSelected() { if (state.selectedId) { state.elements = state.elements.filter(e => e.id !== state.selectedId); state.selectedId = null; renderCanvas(); saveHistory(); updatePanel(); } }
+
+        // --- NEW: Universal Paste Function ---
+        function pasteClipboard(mouseX, mouseY) {
+            if (!clipboard) return;
+            const uid = crypto.randomUUID();
+            
+            // If pasted from right-click, center it on the mouse. Otherwise, offset slightly.
+            let pasteX = clipboard.x + 20;
+            let pasteY = clipboard.y + 20;
+            
+            if (mouseX !== undefined && mouseY !== undefined) {
+                pasteX = mouseX - (clipboard.w / 2);
+                pasteY = mouseY - (clipboard.h / 2);
+            }
+
+            state.elements.push({ ...clipboard, id: uid, x: pasteX, y: pasteY, zIndex: state.elements.length });
+            
+            // Update clipboard coordinates so next paste offsets further down
+            clipboard.x = pasteX;
+            clipboard.y = pasteY;
+            
+            selectElement(uid); 
+            renderCanvas(); 
+            saveHistory(); 
+            updatePanel();
+        }
+
         function duplicateSelected() {
             const el = getSelectedElement(); if (!el) return;
-            const uid = crypto.randomUUID(); state.elements.push({ ...JSON.parse(JSON.stringify(el)), id: uid, x: el.x + 20, y: el.y + 20, zIndex: state.elements.length });
+            
+            // NEW: Duplicating also sets the clipboard so it can be pasted later!
+            clipboard = JSON.parse(JSON.stringify(el)); 
+            
+            const uid = crypto.randomUUID(); 
+            state.elements.push({ ...clipboard, id: uid, x: el.x + 20, y: el.y + 20, zIndex: state.elements.length });
+            
+            clipboard.x = el.x + 20; 
+            clipboard.y = el.y + 20;
+            
             state.selectedId = uid; renderCanvas(); saveHistory(); updatePanel();
         }
 
-        function bringToFront() { const e = getSelectedElement(); if (e) { e.zIndex = Math.max(...state.elements.map(m => m.zIndex)) + 1; renderCanvas(); saveHistory(); } }
-        function sendToBack() { const e = getSelectedElement(); if (e) { e.zIndex = Math.min(...state.elements.map(m => m.zIndex)) - 1; renderCanvas(); saveHistory(); } }
-        function bringForward() { const e = getSelectedElement(); if (e) { e.zIndex++; renderCanvas(); saveHistory(); } }
-        function sendBackward() { const e = getSelectedElement(); if (e) { e.zIndex--; renderCanvas(); saveHistory(); } }
+        // Updated Keyboard Listener to use the new paste function and deep-copy
+        window.addEventListener('keydown', e => {
+            if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.isContentEditable || state.editingId) return;
+            if (e.ctrlKey || e.metaKey) {
+                if (e.key.toLowerCase() === 'z') { e.preventDefault(); e.shiftKey ? redo() : undo(); }
+                if (e.key.toLowerCase() === 'y') { e.preventDefault(); redo(); }
+                if (e.key.toLowerCase() === 'c') { 
+                    e.preventDefault(); 
+                    const el = getSelectedElement();
+                    clipboard = el ? JSON.parse(JSON.stringify(el)) : null; 
+                }
+                if (e.key.toLowerCase() === 'v' && clipboard) { e.preventDefault(); pasteClipboard(); }
+            } else { 
+                if (e.key === 'Delete' || e.key === 'Backspace') deleteSelected(); 
+                if (e.key === 'Escape') selectElement(null); 
+            }
+        });
+
+        // --- NEW: Context Menu Logic ---
+        const ctxMenu = document.getElementById('custom-context-menu');
+        let rightClickCanvasPos = { x: 0, y: 0 }; 
+
+        document.getElementById('canvas-wrapper').addEventListener('contextmenu', e => {
+            e.preventDefault(); // Stop the default browser menu
+
+            // 1. Identify what was clicked
+            const elNode = e.target.closest('.canvas-element');
+            const isHandle = e.target.classList.contains('handle') || e.target.classList.contains('rotate-handle') || e.target.closest('#selection-overlay');
+            
+            let targetId = null;
+            if (elNode) {
+                targetId = elNode.id.replace('el-', '');
+            } else if (isHandle && state.selectedId) {
+                targetId = state.selectedId;
+            }
+
+            // 2. Calculate exact canvas coordinates for Pasting
+            const rect = canvasEl.getBoundingClientRect();
+            rightClickCanvasPos.x = (e.clientX - rect.left) / state.zoom;
+            rightClickCanvasPos.y = (e.clientY - rect.top) / state.zoom;
+
+            ctxMenu.innerHTML = ''; // Clear previous menu
+
+            if (targetId) {
+                // --- ELEMENT MENU ---
+                selectElement(targetId);
+                const el = getSelectedElement();
+                const lockClass = el.locked ? 'disabled' : ''; // Prevent actions if locked
+
+                if (el.type === 'text') {
+                    ctxMenu.innerHTML += `<div class="context-menu-item ${lockClass}" onclick="enterTextEditMode('${el.id}', null); hideContextMenu();">Edit Text</div>`;
+                    ctxMenu.innerHTML += `<div class="context-menu-separator"></div>`;
+                }
+
+                ctxMenu.innerHTML += `
+                    <div class="context-menu-item" onclick="clipboard = JSON.parse(JSON.stringify(getSelectedElement())); hideContextMenu();">Copy</div>
+                    <div class="context-menu-separator"></div>
+                    <div class="context-menu-item ${lockClass}" onclick="bringToFront(); hideContextMenu();">Bring to Front</div>
+                    <div class="context-menu-item ${lockClass}" onclick="sendToBack(); hideContextMenu();">Send to Back</div>
+                    <div class="context-menu-separator"></div>
+                    <div class="context-menu-item ${lockClass}" style="color: #f87171;" onclick="deleteSelected(); hideContextMenu();">Delete</div>
+                `;
+            } else {
+                // --- BACKGROUND CANVAS MENU ---
+                selectElement(null); // Deselect everything
+                const canPaste = clipboard ? '' : 'disabled';
+                
+                ctxMenu.innerHTML = `
+                    <div class="context-menu-item ${canPaste}" onclick="if(clipboard) pasteClipboard(rightClickCanvasPos.x, rightClickCanvasPos.y); hideContextMenu();">
+                        Paste Here
+                    </div>
+                `;
+            }
+
+            // 3. Position the menu intelligently so it doesn't clip off the screen
+            ctxMenu.style.display = 'block';
+            let posX = e.clientX;
+            let posY = e.clientY;
+            
+            if (posX + ctxMenu.offsetWidth > window.innerWidth) posX -= ctxMenu.offsetWidth;
+            if (posY + ctxMenu.offsetHeight > window.innerHeight) posY -= ctxMenu.offsetHeight;
+
+            ctxMenu.style.left = posX + 'px';
+            ctxMenu.style.top = posY + 'px';
+        });
+
+        // Hide the menu when clicking anywhere else
+        function hideContextMenu() {
+            ctxMenu.style.display = 'none';
+        }
+        window.addEventListener('click', hideContextMenu);
+        window.addEventListener('pointerdown', e => {
+            if (!e.target.closest('#custom-context-menu')) hideContextMenu();
+        });
+
+        // function duplicateSelected() {
+        //     const el = getSelectedElement(); if (!el) return;
+        //     const uid = crypto.randomUUID(); state.elements.push({ ...JSON.parse(JSON.stringify(el)), id: uid, x: el.x + 20, y: el.y + 20, zIndex: state.elements.length });
+        //     state.selectedId = uid; renderCanvas(); saveHistory(); updatePanel();
+        // }
+        //      window.addEventListener('keydown', e => {
+        //     if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.isContentEditable || state.editingId) return;
+        //     if (e.ctrlKey || e.metaKey) {
+        //         if (e.key.toLowerCase() === 'z') { e.preventDefault(); e.shiftKey ? redo() : undo(); }
+        //         if (e.key.toLowerCase() === 'y') { e.preventDefault(); redo(); }
+        //         if (e.key.toLowerCase() === 'c') { e.preventDefault(); clipboard = getSelectedElement() ? { ...getSelectedElement() } : null; }
+        //         if (e.key.toLowerCase() === 'v' && clipboard) { e.preventDefault(); const uid = crypto.randomUUID(); state.elements.push({ ...clipboard, id: uid, x: clipboard.x + 20, y: clipboard.y + 20, zIndex: state.elements.length }); clipboard.x += 20; clipboard.y += 20; selectElement(uid); saveHistory(); }
+        //     } else { if (e.key === 'Delete' || e.key === 'Backspace') deleteSelected(); if (e.key === 'Escape') selectElement(null); }
+        // });
+
+        // --- NEW LAYER MANAGEMENT LOGIC ---
+        // --- CORRECTED LAYER MANAGEMENT LOGIC ---
+        function reassignZIndices() {
+            // Just loop through the array and assign 1, 2, 3... based on current order
+            // (We removed the sort from here so it doesn't undo our moves!)
+            state.elements.forEach((el, index) => {
+                el.zIndex = index + 1; 
+            });
+        }
+
+        function bringToFront() { 
+            const e = getSelectedElement(); 
+            if (e) { 
+                state.elements.sort((a, b) => a.zIndex - b.zIndex);
+                state.elements = state.elements.filter(el => el.id !== e.id);
+                state.elements.push(e); // Move to absolute end (top)
+                reassignZIndices();
+                renderCanvas(); saveHistory(); updatePanel(); 
+            } 
+        }
+
+        function sendToBack() { 
+            const e = getSelectedElement(); 
+            if (e) { 
+                state.elements.sort((a, b) => a.zIndex - b.zIndex);
+                state.elements = state.elements.filter(el => el.id !== e.id);
+                state.elements.unshift(e); // Move to absolute beginning (bottom)
+                reassignZIndices();
+                renderCanvas(); saveHistory(); updatePanel(); 
+            } 
+        }
+
+        function bringForward() { 
+            const e = getSelectedElement(); 
+            if (e) { 
+                state.elements.sort((a, b) => a.zIndex - b.zIndex);
+                const idx = state.elements.findIndex(el => el.id === e.id);
+                if (idx < state.elements.length - 1) {
+                    // Swap physical position with the element above it
+                    const temp = state.elements[idx + 1];
+                    state.elements[idx + 1] = e;
+                    state.elements[idx] = temp;
+                    reassignZIndices();
+                    renderCanvas(); saveHistory(); updatePanel();
+                }
+            } 
+        }
+
+        function sendBackward() { 
+            const e = getSelectedElement(); 
+            if (e) { 
+                state.elements.sort((a, b) => a.zIndex - b.zIndex);
+                const idx = state.elements.findIndex(el => el.id === e.id);
+                if (idx > 0) {
+                    // Swap physical position with the element below it
+                    const temp = state.elements[idx - 1];
+                    state.elements[idx - 1] = e;
+                    state.elements[idx] = temp;
+                    reassignZIndices();
+                    renderCanvas(); saveHistory(); updatePanel();
+                }
+            } 
+        }
 
         function enterTextEditMode(id, clickEvent) {
             if (state.editingId === id) return;
             const el = state.elements.find(e => e.id === id); 
-            if (!el) return;
+            if (!el || el.locked) return; // NEW: Block edit mode if locked
 
             state.editingId = id;
             const node = document.getElementById('el-' + id);
@@ -1780,7 +2122,14 @@
 
        
         // Extracts all unique colors, with a fallback for monochrome icons
+
         function getUniqueSvgColors(svgMarkup, defaultFill) {
+            // 1. FAST EXIT FOR FONT ICONS: If it's HTML and not an SVG, just return its color
+            if (!svgMarkup.includes('<svg')) {
+                const hex = normalizeToHex(defaultFill) || '#000000';
+                return [hex];
+            }
+
             const parser = new DOMParser();
             const doc = parser.parseFromString(svgMarkup, 'image/svg+xml');
             const colors = new Set();
@@ -1792,13 +2141,19 @@
                         const hex1 = normalizeToHex(el.getAttribute(attr));
                         if (hex1) colors.add(hex1);
                         
-                        const hex2 = normalizeToHex(el.style[attr]);
-                        if (hex2) colors.add(hex2);
+                        // 2. SAFETY CHECK: Ensure .style exists before accessing it
+                        if (el.style) {
+                            const hex2 = normalizeToHex(el.style[attr]);
+                            if (hex2) colors.add(hex2);
+                        }
                     });
 
-                    // FIX 2: Add Black ONLY if a shape has absolutely no color defined
+                    // 3. SAFETY CHECK: For default black fallbacks
                     if (['path', 'rect', 'circle', 'polygon', 'ellipse'].includes(el.tagName.toLowerCase())) {
-                        if (!el.getAttribute('fill') && !el.style.fill && !el.getAttribute('stroke') && !el.style.stroke) {
+                        const hasStyleFill = el.style && el.style.fill;
+                        const hasStyleStroke = el.style && el.style.stroke;
+                        
+                        if (!el.getAttribute('fill') && !hasStyleFill && !el.getAttribute('stroke') && !hasStyleStroke) {
                             colors.add('#000000');
                         }
                     }
@@ -1840,6 +2195,10 @@
             const el = getSelectedElement();
             if (el && el.originalContent) {
                 el.content = el.originalContent;
+                // NEW: Restore the original state color so renderCanvas doesn't overwrite it
+                if (typeof el.originalFill !== 'undefined') {
+                    el.fill = el.originalFill;
+                }
                 renderCanvas();
                 saveHistory();
                 updatePanel();
@@ -1994,14 +2353,26 @@
                         const hexColor = rgbToHex(computedColor).toUpperCase();
                         const cloneSvg = actualSvg.cloneNode(true);
                         
+                        // 1. Force the XML namespace so DOMParser doesn't crash later during color editing
+                        if (!cloneSvg.getAttribute('xmlns')) {
+                            cloneSvg.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+                        }
+
                         cloneSvg.setAttribute('width', '100%');
                         cloneSvg.setAttribute('height', '100%');
                         cloneSvg.style.display = 'block';
                         cloneSvg.style.visibility = 'visible';
                         cloneSvg.style.opacity = '1';
-                        cloneSvg.style.position = 'relative';
-                        cloneSvg.style.top = '0';
-                        cloneSvg.style.left = '0';
+
+                        // 2. CRITICAL DRAG FIX: Wipe all inherited offsets so it stays perfectly under the drag-catcher
+                        cloneSvg.style.setProperty('position', 'static', 'important');
+                        cloneSvg.style.top = 'auto';
+                        cloneSvg.style.left = 'auto';
+                        cloneSvg.style.right = 'auto';
+                        cloneSvg.style.bottom = 'auto';
+                        cloneSvg.style.margin = '0';
+                        cloneSvg.style.setProperty('transform', 'none', 'important'); 
+                        cloneSvg.style.zIndex = 'auto'; 
 
                         cloneSvg.querySelectorAll('path, rect, circle, polygon').forEach(shape => {
                             shape.setAttribute('fill', hexColor);
@@ -2012,29 +2383,35 @@
                         state.elements.push({ 
                             id: crypto.randomUUID(), type: 'svg', content: cloneSvg.outerHTML, originalContent: cloneSvg.outerHTML,
                             x: elX, y: elY, w: finalW, h: finalH, 
-                            angle: 0, opacity: op, zIndex: zIndex, fill: hexColor, stroke: '' 
+                            angle: 0, opacity: op, zIndex: zIndex, fill: hexColor, stroke: '', originalFill: hexColor 
                         });
-                        return; 
+                        return;
                     } else if (tag === 'i' || (node.className && typeof node.className === 'string' && (node.className.includes('fa-') || node.className.includes('icon')))) {
                         // --- CASE B: IT IS A FONT-ICON (Like <i class="fa fa-phone"></i>) ---
-                        // Instead of extracting text, we inject the raw HTML so FontAwesome renders it natively!
                         let computedColor = window.getComputedStyle(node).color;
                         if (!computedColor || computedColor === 'rgba(0, 0, 0, 0)') computedColor = '#333333';
                         const hexColor = rgbToHex(computedColor).toUpperCase();
 
                         const cloneIcon = node.cloneNode(true);
-                        cloneIcon.style.position = 'static';
+                        
+                        // CRITICAL DRAG FIX: Prevent the wrapper from jumping above the drag catcher
+                        cloneIcon.style.setProperty('position', 'static', 'important');
+                        cloneIcon.style.top = 'auto';
+                        cloneIcon.style.left = 'auto';
+                        cloneIcon.style.right = 'auto';
+                        cloneIcon.style.bottom = 'auto';
                         cloneIcon.style.margin = '0';
                         cloneIcon.style.display = 'block';
                         cloneIcon.style.width = '100%';
                         cloneIcon.style.height = '100%';
+                        cloneIcon.style.setProperty('transform', 'none', 'important');
+                        cloneIcon.style.zIndex = 'auto';
 
                         state.elements.push({ 
-                            // We use 'svg' type because your engine natively applies el.fill to node.style.color for HTML icons!
                             id: crypto.randomUUID(), type: 'svg', 
                             content: cloneIcon.outerHTML, originalContent: cloneIcon.outerHTML,
                             x: elX, y: elY, w: finalW, h: finalH, 
-                            angle: 0, opacity: op, zIndex: zIndex, fill: hexColor, stroke: '' 
+                            angle: 0, opacity: op, zIndex: zIndex, fill: hexColor, stroke: '' ,originalFill: hexColor 
                         });
                         return;
                     }
@@ -2137,15 +2514,7 @@
         function zoomIn() { state.zoom = Math.min(5, state.zoom + 0.2); d_scale.style.transform = `scale(${state.zoom})`; document.getElementById('zoom-text').innerText = Math.round(state.zoom * 100) + '%'; }
         function zoomOut() { state.zoom = Math.max(0.2, state.zoom - 0.2); d_scale.style.transform = `scale(${state.zoom})`; document.getElementById('zoom-text').innerText = Math.round(state.zoom * 100) + '%'; }
 
-        window.addEventListener('keydown', e => {
-            if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.isContentEditable || state.editingId) return;
-            if (e.ctrlKey || e.metaKey) {
-                if (e.key.toLowerCase() === 'z') { e.preventDefault(); e.shiftKey ? redo() : undo(); }
-                if (e.key.toLowerCase() === 'y') { e.preventDefault(); redo(); }
-                if (e.key.toLowerCase() === 'c') { e.preventDefault(); clipboard = getSelectedElement() ? { ...getSelectedElement() } : null; }
-                if (e.key.toLowerCase() === 'v' && clipboard) { e.preventDefault(); const uid = crypto.randomUUID(); state.elements.push({ ...clipboard, id: uid, x: clipboard.x + 20, y: clipboard.y + 20, zIndex: state.elements.length }); clipboard.x += 20; clipboard.y += 20; selectElement(uid); saveHistory(); }
-            } else { if (e.key === 'Delete' || e.key === 'Backspace') deleteSelected(); if (e.key === 'Escape') selectElement(null); }
-        });
+   
 
         function showLoading(text = "PROCESSING EXPORT...") {
             const loader = document.getElementById('export-loader');
@@ -2414,6 +2783,7 @@ async function exportToPDF() {
         <div class="spinner"></div>
         <div id="loader-text" style="color: white; font-size: 16px; font-weight: 500; letter-spacing: 0.05em;">PROCESSING EXPORT...</div>
     </div>
+    
 </body>
 
 </html>
