@@ -808,11 +808,16 @@
 
             <div class="panel-section" id="panel-image">
                 <h3>Image Adjustments</h3>
-                <div class="control-group">
+                <div class="control-group" style="margin-bottom: 15px;">
                     <button onclick="document.getElementById('replace-img-input').click()"
-                        style="width:100%; margin-bottom:15px;">Replace Image...</button>
+                        style="width:100%; margin-bottom:8px;">Replace from Computer...</button>
                     <input type="file" id="replace-img-input" accept="image/png, image/jpeg, image/webp" style="display:none"
                         onchange="replaceImageFile(this)">
+                    
+                    <div style="display:flex; gap:5px;">
+                        <input type="text" id="replace-img-url" placeholder="Replace URL here..." style="flex:1; margin:0;">
+                        <button onclick="replaceImageFromUrl()" style="padding: 0 12px;">Apply URL</button>
+                    </div>
                 </div>
                 <div class="control-group">
                     <label>Border Radius</label><input type="number" id="prop-imageradius" min="0">
@@ -1647,7 +1652,17 @@
 
         function toggleBoolProp(key) { const el = getSelectedElement(); if (el) { el[key] = !el[key]; renderCanvas(); saveHistory(); updatePanel(); } }
         function setProp(key, val) { const el = getSelectedElement(); if (el) { el[key] = val; renderCanvas(); saveHistory(); } }
-        function deleteSelected() { if (state.selectedId) { state.elements = state.elements.filter(e => e.id !== state.selectedId); state.selectedId = null; renderCanvas(); saveHistory(); updatePanel(); } }
+       
+        function deleteSelected() { 
+            const el = getSelectedElement();
+            if (!el || el.locked) return; // NEW: Stop if locked
+            
+            if (state.selectedId) { 
+                state.elements = state.elements.filter(e => e.id !== state.selectedId); 
+                state.selectedId = null; 
+                renderCanvas(); saveHistory(); updatePanel(); 
+            } 
+        }
 
         // --- NEW: Universal Paste Function ---
         function pasteClipboard(mouseX, mouseY) {
@@ -1676,7 +1691,8 @@
         }
 
         function duplicateSelected() {
-            const el = getSelectedElement(); if (!el) return;
+            const el = getSelectedElement();
+            if (!el || el.locked) return;
             
             // NEW: Duplicating also sets the clipboard so it can be pasted later!
             clipboard = JSON.parse(JSON.stringify(el)); 
@@ -1689,7 +1705,7 @@
             
             state.selectedId = uid; renderCanvas(); saveHistory(); updatePanel();
         }
-
+      
         // Updated Keyboard Listener to use the new paste function and deep-copy
         window.addEventListener('keydown', e => {
             if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.isContentEditable || state.editingId) return;
@@ -1699,7 +1715,9 @@
                 if (e.key.toLowerCase() === 'c') { 
                     e.preventDefault(); 
                     const el = getSelectedElement();
-                    clipboard = el ? JSON.parse(JSON.stringify(el)) : null; 
+                    if (el && !el.locked) {
+                        clipboard = JSON.parse(JSON.stringify(el)); 
+                    }
                 }
                 if (e.key.toLowerCase() === 'v' && clipboard) { e.preventDefault(); pasteClipboard(); }
             } else { 
@@ -1745,7 +1763,7 @@
                 }
 
                 ctxMenu.innerHTML += `
-                    <div class="context-menu-item" onclick="clipboard = JSON.parse(JSON.stringify(getSelectedElement())); hideContextMenu();">Copy</div>
+                    <div class="context-menu-item ${lockClass}" onclick="clipboard = JSON.parse(JSON.stringify(getSelectedElement())); hideContextMenu();">Copy</div>
                     <div class="context-menu-separator"></div>
                     <div class="context-menu-item ${lockClass}" onclick="bringToFront(); hideContextMenu();">Bring to Front</div>
                     <div class="context-menu-item ${lockClass}" onclick="sendToBack(); hideContextMenu();">Send to Back</div>
@@ -1784,21 +1802,6 @@
         window.addEventListener('pointerdown', e => {
             if (!e.target.closest('#custom-context-menu')) hideContextMenu();
         });
-
-        // function duplicateSelected() {
-        //     const el = getSelectedElement(); if (!el) return;
-        //     const uid = crypto.randomUUID(); state.elements.push({ ...JSON.parse(JSON.stringify(el)), id: uid, x: el.x + 20, y: el.y + 20, zIndex: state.elements.length });
-        //     state.selectedId = uid; renderCanvas(); saveHistory(); updatePanel();
-        // }
-        //      window.addEventListener('keydown', e => {
-        //     if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.isContentEditable || state.editingId) return;
-        //     if (e.ctrlKey || e.metaKey) {
-        //         if (e.key.toLowerCase() === 'z') { e.preventDefault(); e.shiftKey ? redo() : undo(); }
-        //         if (e.key.toLowerCase() === 'y') { e.preventDefault(); redo(); }
-        //         if (e.key.toLowerCase() === 'c') { e.preventDefault(); clipboard = getSelectedElement() ? { ...getSelectedElement() } : null; }
-        //         if (e.key.toLowerCase() === 'v' && clipboard) { e.preventDefault(); const uid = crypto.randomUUID(); state.elements.push({ ...clipboard, id: uid, x: clipboard.x + 20, y: clipboard.y + 20, zIndex: state.elements.length }); clipboard.x += 20; clipboard.y += 20; selectElement(uid); saveHistory(); }
-        //     } else { if (e.key === 'Delete' || e.key === 'Backspace') deleteSelected(); if (e.key === 'Escape') selectElement(null); }
-        // });
 
         // --- NEW LAYER MANAGEMENT LOGIC ---
         // --- CORRECTED LAYER MANAGEMENT LOGIC ---
@@ -2022,6 +2025,43 @@
             reader.readAsDataURL(file); input.value = '';
         }
 
+        async function replaceImageFromUrl() {
+            const el = getSelectedElement(); 
+            if (!el || el.type !== 'image') return;
+            
+            const urlInput = document.getElementById('replace-img-url');
+            const url = urlInput.value.trim();
+            
+            if (!url) {
+                alert("Please paste a valid image URL first.");
+                return;
+            }
+
+            // Change button text to show loading state
+            const btn = urlInput.nextElementSibling;
+            const originalText = btn.innerText;
+            btn.innerText = "Loading...";
+            btn.disabled = true;
+
+            try {
+                // Use your existing proxy function to bypass CORS issues for canvas exporting!
+                const safeBase64 = await fetchImageAsBase64(url);
+                
+                el.content = safeBase64;
+                renderCanvas(); 
+                saveHistory(); 
+                
+                urlInput.value = ''; // Clear the input after success
+            } catch (error) {
+                console.error("Image Load Error:", error);
+                alert("Could not load image. The website might be blocking direct access, or the URL is invalid.");
+            } finally {
+                // Restore button
+                btn.innerText = originalText;
+                btn.disabled = false;
+            }
+        }
+
         // --- SVG Functions ---
 
         // 1. Add new SVG from computer
@@ -2208,14 +2248,35 @@
         // --- Modals / HTML Importer ---
         function showModal(id) { document.getElementById(id).style.display = 'flex'; } function hideModal(id) { document.getElementById(id).style.display = 'none'; }
 
-        function loadHtmlFromMarkup() { parseHtmlIntoState(document.getElementById('html-markup-input').value).then(() => hideModal('modal-html')); }
+        function loadHtmlFromMarkup() { 
+            showLoading("LOADING TEMPLATE...");
+            parseHtmlIntoState(document.getElementById('html-markup-input').value)
+                .then(() => {
+                    hideModal('modal-html');
+                })
+                .catch(err => {
+                    console.error("Template load error:", err);
+                    alert("Failed to load the HTML markup.");
+                })
+                .finally(() => {
+                    hideLoading();
+                });
+        }
 
         function importHtmlFile(input) { 
             if (!input.files.length) return; 
             const r = new FileReader(); 
             r.onload = async e => {
-                await parseHtmlIntoState(e.target.result);
-                input.value = '';
+                showLoading("LOADING TEMPLATE...");
+                try {
+                    await parseHtmlIntoState(e.target.result);
+                } catch (err) {
+                    console.error("File import error:", err);
+                    alert("Failed to parse the uploaded file.");
+                } finally {
+                    hideLoading();
+                    input.value = '';
+                }
             };
             r.readAsText(input.files[0]); 
         }
@@ -2560,8 +2621,11 @@ async function exportToImage(format) {
     const overlay = clone.querySelector('#selection-overlay');
     if (overlay) overlay.remove();
 
-    // --- SMART TEXT WRAP FIX FOR HTML2CANVAS ---
+
+   // --- SMART TEXT WRAP FIX FOR HTML2CANVAS ---
+    const canvasCtx = document.createElement('canvas').getContext('2d');
     const textElements = clone.querySelectorAll('.canvas-element');
+    
     textElements.forEach(el => {
         const stateEl = state.elements.find(e => 'el-' + e.id === el.id);
         if (stateEl && stateEl.type === 'text') {
@@ -2569,48 +2633,98 @@ async function exportToImage(format) {
             if (!originalNode) return;
 
             const computedStyle = window.getComputedStyle(originalNode);
-            const fontSize = parseFloat(computedStyle.fontSize);
             const currentWidth = parseFloat(el.style.width);
-            
-            // 1. Lock line-height to prevent vertical stretching
-            el.style.lineHeight = computedStyle.lineHeight;
-            
-            // 2. Fix the aggressive wrap rule for html2canvas compatibility
-            el.style.wordBreak = 'break-word';
-            el.style.overflowWrap = 'break-word';
-
-            // 3. Detect if the text is currently occupying only a single line
+            const fontSize = parseFloat(computedStyle.fontSize);
             const lineHeight = parseFloat(computedStyle.lineHeight) || (fontSize * 1.2);
-            // If the scroll height is roughly equal to one line height, it's a single line
-            const isSingleLine = originalNode.scrollHeight <= (lineHeight + 5);
-
-            if (isSingleLine) {
-                // FIX FOR SINGLE-LINE TEXT: 
-                // Force it to never wrap and give it plenty of sub-pixel breathing room
-                el.style.whiteSpace = 'nowrap';
-                el.style.width = (currentWidth + 10) + 'px'; 
-            } else {
-                // MULTI-LINE LOGIC
-                // Check if it's "Vertical Text" (width is very narrow)
-                if (currentWidth <= (fontSize * 1.8)) {
-                    // FORCE html2canvas to break mid-word
-                    el.style.wordBreak = 'break-all';
-                    el.style.overflowWrap = 'anywhere';
-                    el.style.whiteSpace = 'pre-wrap';
-                    
-                    // Strictly lock the width so html2canvas cannot expand it
-                    el.style.width = currentWidth + 'px';
-                    el.style.minWidth = currentWidth + 'px';
-                    el.style.maxWidth = currentWidth + 'px';
-                } else {
-                    // Standard multi-line paragraph
-                    el.style.width = (currentWidth + 1) + 'px';
-                }
             
+            // 1. Wrap Strategy Detection
+            // Tighter threshold: A box must be practically 1-character wide to be vertical
+            const isVertical = currentWidth <= (fontSize * 1.8); 
+            // Relaxed threshold: Allows custom fonts with large padding to stay single-line
+            const isSingleLine = originalNode.scrollHeight <= (lineHeight * 1.5);
+
+            // 2. DYNAMIC BUFFER
+            // Horizontal text gets 8px to guarantee html2canvas never prematurely wraps words
+            const buffer = isVertical ? 0 : 8;
+            
+            el.style.lineHeight = computedStyle.lineHeight;
+            el.style.width = (currentWidth + buffer) + 'px';
+            el.style.minWidth = (currentWidth + buffer) + 'px';
+            el.style.maxWidth = (currentWidth + buffer) + 'px';
+
+            if (computedStyle.textAlign === 'center') {
+                el.style.left = (parseFloat(el.style.left) - (buffer / 2)) + 'px';
+            } else if (computedStyle.textAlign === 'right') {
+                el.style.left = (parseFloat(el.style.left) - buffer) + 'px';
+            }
+
+            if (isSingleLine && !isVertical) {
+                // FIX: Lock Single Line text so it is physically impossible to wrap
+                el.style.whiteSpace = 'nowrap';
+                el.style.wordBreak = 'keep-all';
+                el.style.overflowWrap = 'normal'; 
+            } else {
+                // Multi-line & Vertical Stacked Text
+                el.style.whiteSpace = 'pre-wrap';
+                el.style.wordBreak = 'break-word';
+                el.style.overflowWrap = 'break-word'; 
+                
+                // Strip hidden leading newlines
+                el.innerHTML = el.innerHTML.replace(/^[\s\r\n]+/, '');
+
+                // 3. SEPARATED LOGIC: Smart Zero-Width Space Injector
+                canvasCtx.font = `${computedStyle.fontStyle} ${computedStyle.fontWeight} ${computedStyle.fontSize} ${computedStyle.fontFamily}`;
+                let letterSpacing = parseFloat(computedStyle.letterSpacing) || 0;
+                
+                const injectSmartZWS = (node) => {
+                    Array.from(node.childNodes).forEach(child => {
+                        if (child.nodeType === 3 && child.nodeValue) {
+                            const parts = child.nodeValue.split(/(\s+)/);
+                            let modified = false;
+
+                            const newParts = parts.map(part => {
+                                if (part.match(/^\s+$/)) return part;
+
+                                let measureText = part;
+                                if (stateEl.textTransform === 'uppercase') measureText = measureText.toUpperCase();
+                                if (stateEl.textTransform === 'lowercase') measureText = measureText.toLowerCase();
+
+                                const w = canvasCtx.measureText(measureText).width + (measureText.length * letterSpacing);
+                                
+                                if (isVertical) {
+                                    // Aggressive wrapping for vertical columns
+                                    if (w > currentWidth - 1) { 
+                                        modified = true;
+                                        return part.split('').join('\u200B');
+                                    }
+                                } else {
+                                    // SAFEGUARD: Only break massive strings (>15 chars) in horizontal text.
+                                    // Standard words ("HIRING", "SUNDAY") completely bypass the measurement 
+                                    // hack, preventing them from being corrupted!
+                                    if (part.length > 15 && w > (currentWidth + buffer)) {
+                                        modified = true;
+                                        return part.split('').join('\u200B');
+                                    }
+                                }
+                                return part; 
+                            });
+
+                            if (modified) {
+                                child.nodeValue = newParts.join('');
+                            }
+                        } else if (child.nodeType === 1) { 
+                            injectSmartZWS(child);
+                        }
+                    });
+                };
+                injectSmartZWS(el);
             }
         }
     });
     // --- END SMART TEXT FIX ---
+    
+
+    
     
     // D. REMOVE GRID: Ensure the clone has no background grid
     clone.style.backgroundImage = 'none';
@@ -2689,8 +2803,10 @@ async function exportToPDF() {
     const overlay = clone.querySelector('#selection-overlay');
     if (overlay) overlay.remove();
 
-    // --- SMART TEXT WRAP FIX FOR HTML2CANVAS ---
+// --- SMART TEXT WRAP FIX FOR HTML2CANVAS ---
+    const canvasCtx = document.createElement('canvas').getContext('2d');
     const textElements = clone.querySelectorAll('.canvas-element');
+    
     textElements.forEach(el => {
         const stateEl = state.elements.find(e => 'el-' + e.id === el.id);
         if (stateEl && stateEl.type === 'text') {
@@ -2698,47 +2814,95 @@ async function exportToPDF() {
             if (!originalNode) return;
 
             const computedStyle = window.getComputedStyle(originalNode);
-            const fontSize = parseFloat(computedStyle.fontSize);
             const currentWidth = parseFloat(el.style.width);
-            
-            // 1. Lock line-height to prevent vertical stretching
-            el.style.lineHeight = computedStyle.lineHeight;
-            
-            // 2. Fix the aggressive wrap rule for html2canvas compatibility
-            el.style.wordBreak = 'break-word';
-            el.style.overflowWrap = 'break-word';
-
-            // 3. Detect if the text is currently occupying only a single line
+            const fontSize = parseFloat(computedStyle.fontSize);
             const lineHeight = parseFloat(computedStyle.lineHeight) || (fontSize * 1.2);
-            // If the scroll height is roughly equal to one line height, it's a single line
-            const isSingleLine = originalNode.scrollHeight <= (lineHeight + 5);
+            
+            // 1. Wrap Strategy Detection
+            // Tighter threshold: A box must be practically 1-character wide to be vertical
+            const isVertical = currentWidth <= (fontSize * 1.8); 
+            // Relaxed threshold: Allows custom fonts with large padding to stay single-line
+            const isSingleLine = originalNode.scrollHeight <= (lineHeight * 1.5);
 
-            if (isSingleLine) {
-                // FIX FOR SINGLE-LINE TEXT: 
-                // Force it to never wrap and give it plenty of sub-pixel breathing room
+            // 2. DYNAMIC BUFFER
+            // Horizontal text gets 8px to guarantee html2canvas never prematurely wraps words
+            const buffer = isVertical ? 0 : 8;
+            
+            el.style.lineHeight = computedStyle.lineHeight;
+            el.style.width = (currentWidth + buffer) + 'px';
+            el.style.minWidth = (currentWidth + buffer) + 'px';
+            el.style.maxWidth = (currentWidth + buffer) + 'px';
+
+            if (computedStyle.textAlign === 'center') {
+                el.style.left = (parseFloat(el.style.left) - (buffer / 2)) + 'px';
+            } else if (computedStyle.textAlign === 'right') {
+                el.style.left = (parseFloat(el.style.left) - buffer) + 'px';
+            }
+
+            if (isSingleLine && !isVertical) {
+                // FIX: Lock Single Line text so it is physically impossible to wrap
                 el.style.whiteSpace = 'nowrap';
-                el.style.width = (currentWidth + 10) + 'px'; 
+                el.style.wordBreak = 'keep-all';
+                el.style.overflowWrap = 'normal'; 
             } else {
-                 // MULTI-LINE LOGIC
-                // Check if it's "Vertical Text" (width is very narrow)
-                if (currentWidth <= (fontSize * 1.8)) {
-                    // FORCE html2canvas to break mid-word
-                    el.style.wordBreak = 'break-all';
-                    el.style.overflowWrap = 'anywhere';
-                    el.style.whiteSpace = 'pre-wrap';
-                    
-                    // Strictly lock the width so html2canvas cannot expand it
-                    el.style.width = currentWidth + 'px';
-                    el.style.minWidth = currentWidth + 'px';
-                    el.style.maxWidth = currentWidth + 'px';
-                } else {
-                    // Standard multi-line paragraph
-                    el.style.width = (currentWidth + 1) + 'px';
-                }
+                // Multi-line & Vertical Stacked Text
+                el.style.whiteSpace = 'pre-wrap';
+                el.style.wordBreak = 'break-word';
+                el.style.overflowWrap = 'break-word'; 
+                
+                // Strip hidden leading newlines
+                el.innerHTML = el.innerHTML.replace(/^[\s\r\n]+/, '');
+
+                // 3. SEPARATED LOGIC: Smart Zero-Width Space Injector
+                canvasCtx.font = `${computedStyle.fontStyle} ${computedStyle.fontWeight} ${computedStyle.fontSize} ${computedStyle.fontFamily}`;
+                let letterSpacing = parseFloat(computedStyle.letterSpacing) || 0;
+                
+                const injectSmartZWS = (node) => {
+                    Array.from(node.childNodes).forEach(child => {
+                        if (child.nodeType === 3 && child.nodeValue) {
+                            const parts = child.nodeValue.split(/(\s+)/);
+                            let modified = false;
+
+                            const newParts = parts.map(part => {
+                                if (part.match(/^\s+$/)) return part;
+
+                                let measureText = part;
+                                if (stateEl.textTransform === 'uppercase') measureText = measureText.toUpperCase();
+                                if (stateEl.textTransform === 'lowercase') measureText = measureText.toLowerCase();
+
+                                const w = canvasCtx.measureText(measureText).width + (measureText.length * letterSpacing);
+                                
+                                if (isVertical) {
+                                    // Aggressive wrapping for vertical columns
+                                    if (w > currentWidth - 1) { 
+                                        modified = true;
+                                        return part.split('').join('\u200B');
+                                    }
+                                } else {
+                                    // SAFEGUARD: Only break massive strings (>15 chars) in horizontal text.
+                                    // Standard words ("HIRING", "SUNDAY") completely bypass the measurement 
+                                    // hack, preventing them from being corrupted!
+                                    if (part.length > 15 && w > (currentWidth + buffer)) {
+                                        modified = true;
+                                        return part.split('').join('\u200B');
+                                    }
+                                }
+                                return part; 
+                            });
+
+                            if (modified) {
+                                child.nodeValue = newParts.join('');
+                            }
+                        } else if (child.nodeType === 1) { 
+                            injectSmartZWS(child);
+                        }
+                    });
+                };
+                injectSmartZWS(el);
             }
         }
     });
-    // --- END SMART TEXT FIX ---
+    // --- END SMART TEXT FIX --- 
 
     clone.style.backgroundImage = 'none';
     clone.style.width = state.canvasW + 'px';
