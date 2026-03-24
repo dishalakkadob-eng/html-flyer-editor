@@ -440,6 +440,19 @@
             animation: spin 1s linear infinite;
         }
 
+        /* Multi-Select Styles */
+        #selection-overlay[data-selected-type="multi"] {
+            border-style: dashed;
+            background: rgba(99, 102, 241, 0.05);
+            cursor: move;
+            pointer-events: auto; /* Allows us to click the box to drag */
+        }
+        #selection-overlay[data-selected-type="multi"] .handle,
+        #selection-overlay[data-selected-type="multi"] .rotate-handle,
+        #selection-overlay[data-selected-type="multi"] .rotate-line {
+            display: none !important;
+        }
+
         /* --- NEW: Custom Context Menu --- */
         .context-menu {
             position: fixed;
@@ -716,9 +729,16 @@
                     <div><label>X</label><input type="number" id="prop-x" step="1"></div>
                     <div><label>Y</label><input type="number" id="prop-y" step="1"></div>
                 </div>
+
                 <div class="control-group control-row">
                     <div><label>Width</label><input type="number" id="prop-w" min="10" step="1"></div>
                     <div><label>Height</label><input type="number" id="prop-h" min="10" step="1"></div>
+                </div>
+                <div class="control-group control-row">
+                    <div style="display: flex; align-items: center; justify-content: flex-start; padding-bottom: 2px;">
+                        <input type="checkbox" id="prop-aspect-lock" title="Lock Aspect Ratio" style="margin: 0; cursor: pointer; margin-right: 5px;">
+                        <label style="font-size: 10px; margin-bottom: 2px; text-align: center;">Aspect Lock</label>
+                    </div>
                 </div>
                 <div class="control-group control-row">
                     <div><label>Rotation (°)</label><input type="number" id="prop-angle" step="1"></div>
@@ -831,6 +851,23 @@
                         max="1" step="0.05"></div>
                 <div class="control-group"><label>Blur</label><input type="range" id="prop-blur" min="0" max="20"
                         step="0.5"></div>
+                <h3 style="margin-top:20px; display:flex; align-items:center; justify-content:space-between;">
+                    Drop Shadow
+                    <input type="checkbox" id="prop-shadow-active" style="width:auto; margin:0; cursor:pointer;">
+                </h3>
+                <div id="shadow-controls" style="display:none; padding-top: 5px;">
+                    <div class="control-group control-row">
+                        <div><label>X Offset</label><input type="number" id="prop-shadow-x" min="-50" max="50" step="1"></div>
+                        <div><label>Y Offset</label><input type="number" id="prop-shadow-y" min="-50" max="50" step="1"></div>
+                    </div>
+                    <div class="control-group control-row">
+                        <div><label>Blur</label><input type="number" id="prop-shadow-bl" min="0" max="50" step="1"></div>
+                        <div><label>Spread</label><input type="number" id="prop-shadow-sp" min="-50" max="50" step="1"></div>
+                    </div>
+                    <div class="control-group">
+                        <label>Color</label><input type="color" id="prop-shadow-c">
+                    </div>
+                </div>
             </div>
             
             <div class="panel-section" id="panel-svg">
@@ -848,10 +885,12 @@
                 <div id="svg-color-container" style="display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 15px;"></div>
                 
                 <button onclick="resetSvgToOriginal()" style="width:100%; margin-bottom:15px; background: transparent; border: 1px solid var(--text-muted); color: var(--text-main);">Reset to Original</button>
-    
-                <!-- <div class="control-group">
-                    <label>Stroke Width</label><input type="number" id="prop-svgstrokewidth" min="0" step="1">
-                </div> -->
+
+                <h3 style="margin-top:20px;">Stroke Outline</h3>
+                <div class="control-group control-row">
+                    <div><label>Stroke Width</label><input type="number" id="prop-svgstrokewidth" min="0" step="1"></div>
+                    <div><label>Stroke Color</label><input type="color" id="prop-svgstroke"></div>
+                </div>
             </div>
         </div>
     </div>
@@ -1065,9 +1104,12 @@
                         }
                     });
                 } else if (el.type === 'image') {
-                  
                     const fit = el.objectFit || 'fill';
-                    node.innerHTML = `<img src="${el.content}" draggable="false" style="width:100%; height:100%; display:block; object-fit:${fit}; border-radius:${el.radius}px; filter: brightness(${1 + el.filters.b}) contrast(${1 + el.filters.c}) saturate(${1 + el.filters.s}) blur(${el.filters.bl}px); box-shadow: ${el.shadow.x}px ${el.shadow.y}px ${el.shadow.bl}px ${el.shadow.c}; pointer-events:none;"/>`;
+                    const shadowStr = el.shadow && el.shadow.active 
+                        ? `${el.shadow.x}px ${el.shadow.y}px ${el.shadow.bl}px ${el.shadow.sp || 0}px ${el.shadow.c}` 
+                        : 'none';
+
+                    node.innerHTML = `<img src="${el.content}" draggable="false" style="width:100%; height:100%; display:block; object-fit:${fit}; border-radius:${el.radius}px; filter: brightness(${1 + el.filters.b}) contrast(${1 + el.filters.c}) saturate(${1 + el.filters.s}) blur(${el.filters.bl}px); box-shadow: ${shadowStr}; pointer-events:none;"/>`;
                 } else if (el.type === 'svg') {
                     // FIX 1: pointer-events:none on the content wrapper KILLS native text-selection.
                     // The drag-catcher now cleanly absorbs all clicks for the JS engine!
@@ -1096,6 +1138,17 @@
                         svg.style.height = '100%'; 
                         svg.style.display = 'block';
                         svg.style.overflow = 'visible';
+
+                        // --- NEW: Apply Native SVG Stroke ---
+                        if (el.strokeWidth > 0) {
+                            svg.style.stroke = el.stroke || '#000000';
+                            svg.style.strokeWidth = el.strokeWidth + 'px';
+                            // Force nested elements to inherit the global stroke
+                            svg.querySelectorAll('*').forEach(child => {
+                                child.style.stroke = 'inherit';
+                                child.style.strokeWidth = 'inherit';
+                            });
+                        }
                     } else if (iTag) {
                         // FIX 2: Correct scaling and deep color injection for nested FontAwesome DOM structures
                         const maxDim = Math.max(el.w, el.h);
@@ -1132,6 +1185,12 @@
                                     child.style.setProperty('color', el.fill, 'important');
                                 });
                             }
+                            // --- NEW: Apply HTML Text Stroke to Icon ---
+                            if (el.strokeWidth > 0) {
+                                importedRoot.style.webkitTextStroke = `${el.strokeWidth}px ${el.stroke || '#000000'}`;
+                            } else {
+                                importedRoot.style.webkitTextStroke = '0px transparent';
+                            }
                         }
                     }
 
@@ -1157,19 +1216,39 @@
             });
 
             const selEl = getSelectedElement();
-            if (selEl) {
+            
+            // --- NEW: Multi-Select Box ---
+            if (state.selectAllMode && state.elements.length > 0) {
+                let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+                state.elements.forEach(el => {
+                    if (el.x < minX) minX = el.x;
+                    if (el.y < minY) minY = el.y;
+                    if (el.x + el.w > maxX) maxX = el.x + el.w;
+                    if (el.y + el.h > maxY) maxY = el.y + el.h;
+                });
+                selectionOverlay.style.display = 'block'; 
+                selectionOverlay.style.zIndex = Math.max(...state.elements.map(e => e.zIndex)) + 10;
+                selectionOverlay.style.left = minX + 'px'; 
+                selectionOverlay.style.top = minY + 'px';
+                selectionOverlay.style.width = (maxX - minX) + 'px'; 
+                selectionOverlay.style.height = (maxY - minY) + 'px';
+                selectionOverlay.style.transform = `rotate(0deg)`;
+                selectionOverlay.setAttribute('data-selected-type', 'multi');
+                selectionOverlay.classList.remove('locked-overlay');
+            } else if (selEl) {
+                // --- Existing Single Select Box ---
                 selectionOverlay.style.display = 'block'; selectionOverlay.style.zIndex = Math.max(...state.elements.map(e => e.zIndex)) + 10;
                 selectionOverlay.style.left = selEl.x + 'px'; selectionOverlay.style.top = selEl.y + 'px';
                 selectionOverlay.style.width = selEl.w + 'px'; selectionOverlay.style.height = selEl.h + 'px';
                 selectionOverlay.style.transform = `rotate(${selEl.angle}deg)`;
                 selectionOverlay.setAttribute('data-selected-type', selEl.type);
-                // NEW: Apply red border if locked
-                if (selEl.locked) {
-                    selectionOverlay.classList.add('locked-overlay');
-                } else {
-                    selectionOverlay.classList.remove('locked-overlay');
-                }
-            } else { selectionOverlay.style.display = 'none';selectionOverlay.removeAttribute('data-selected-type');selectionOverlay.classList.remove('locked-overlay'); }
+                if (selEl.locked) selectionOverlay.classList.add('locked-overlay');
+                else selectionOverlay.classList.remove('locked-overlay');
+            } else { 
+                selectionOverlay.style.display = 'none';
+                selectionOverlay.removeAttribute('data-selected-type');
+                selectionOverlay.classList.remove('locked-overlay'); 
+            }
         }
 
         function getSelectedElement() { return state.elements.find(e => e.id === state.selectedId); }
@@ -1203,6 +1282,15 @@
             const rect = canvasEl.getBoundingClientRect();
             dragStartX = (e.clientX - rect.left) / state.zoom; 
             dragStartY = (e.clientY - rect.top) / state.zoom;
+
+            // --- NEW: Catch clicks on the multi-select bounding box ---
+            if (e.target.id === 'selection-overlay' && state.selectAllMode) {
+                dragMode = 'move-all';
+                // Store the starting positions of ALL elements
+                dragStartObj = state.elements.map(el => ({ id: el.id, x: el.x, y: el.y }));
+                e.preventDefault();
+                return;
+            }
 
             if (e.target.classList.contains('handle')) { 
                 const selEl = getSelectedElement();
@@ -1244,6 +1332,7 @@
             }
 
             if (elNode) {
+                state.selectAllMode = false;
                 const selectedId = elNode.id.replace('el-', '');
                 const wasAlreadySelected = (state.selectedId === selectedId);
                 
@@ -1264,6 +1353,7 @@
                 e.preventDefault(); 
                 return;
             }
+            state.selectAllMode = false;
             selectElement(null);
         });
 
@@ -1273,6 +1363,20 @@
             const rect = canvasEl.getBoundingClientRect();
             const mx = (e.clientX - rect.left) / state.zoom;
             const my = (e.clientY - rect.top) / state.zoom;
+
+            if (dragMode === 'move-all') {
+                const dx = (mx - dragStartX);
+                const dy = (my - dragStartY);
+                dragStartObj.forEach(startObj => {
+                    const el = state.elements.find(e => e.id === startObj.id);
+                    if (el && !el.locked) {
+                        el.x = startObj.x + dx;
+                        el.y = startObj.y + dy;
+                    }
+                });
+                renderCanvas();
+                return; // Stop here so it doesn't trigger single-element logic
+            }
 
             if (dragMode === 'move') {
                 el.x = dragStartObj.x + (mx - dragStartX); 
@@ -1312,11 +1416,14 @@
                     
                 const isSideHandle = ['e', 'w', 'n', 's'].includes(dragMode);
                 const isCornerHandle = ['nw', 'ne', 'se', 'sw'].includes(dragMode);
+                
+                // --- NEW ASPECT RATIO LOGIC ---
+                const forceProportional = e.shiftKey || el.aspectLocked;
+                const aspect = dragStartObj.w / dragStartObj.h;
 
                 if (isSideHandle) {
-                    // --- NEW CHANGE: Apply the min-width lock ONLY to side-resizing to preserve autowrapping ---
                     const MIN_W = dragStartObj.minWidth || 20;
-                    const MIN_H = dragStartObj.minWidth || 20;;
+                    const MIN_H = dragStartObj.minHeight || 20;
                     if (dragMode === 'e') w = Math.max(MIN_W, u_mx - dragStartObj.x);
                     if (dragMode === 'w') { 
                         const r = dragStartObj.x + dragStartObj.w; 
@@ -1329,83 +1436,93 @@
                         h = Math.max(MIN_H, b - u_my);
                         y = b - h;
                     }
-                    // --- NEW FIX: Dynamically measure text wrap height for Side Handles ---
+
                     if (el.type === 'text' && ['e', 'w'].includes(dragMode)) {
                         const node = document.getElementById('el-' + el.id);
                         if (node) {
                             const oldW = node.style.width;
                             node.style.width = w + 'px';
-                            h = node.scrollHeight; // Grab exact height after word wrap
+                            h = node.scrollHeight;
                             node.style.width = oldW;
                         }
+                    } else if (forceProportional && el.type !== 'text') {
+                        // Apply Proportional rule to Side Handles
+                        if (['e', 'w'].includes(dragMode)) {
+                            h = w / aspect;
+                            y = dragStartObj.y + (dragStartObj.h - h) / 2; // Keep centered vertically
+                        } else {
+                            w = h * aspect;
+                            x = dragStartObj.x + (dragStartObj.w - w) / 2; // Keep centered horizontally
+                        }
                     }
-                    // ---------------------------------------------------------------------------------------------
                 }
 
                 if (isCornerHandle) {
+                    if (forceProportional || el.type === 'text') {
+                        // --- PROPORTIONAL SCALING ---
+                        const dirX = dragMode.includes('e') ? 1 : -1;
+                        const dirY = dragMode.includes('s') ? 1 : -1;
+                        
+                        const pivotX = dragMode.includes('e') ? dragStartObj.x : dragStartObj.x + dragStartObj.w;
+                        const pivotY = dragMode.includes('s') ? dragStartObj.y : dragStartObj.y + dragStartObj.h;
 
-                    // Diagonal Vector Projection for uniform scaling speed
-                    const dirX = dragMode.includes('e') ? 1 : -1;
-                    const dirY = dragMode.includes('s') ? 1 : -1;
-                    
-                    const pivotX = dragMode.includes('e') ? dragStartObj.x : dragStartObj.x + dragStartObj.w;
-                    const pivotY = dragMode.includes('s') ? dragStartObj.y : dragStartObj.y + dragStartObj.h;
+                        const vDiagX = dragStartObj.w * dirX;
+                        const vDiagY = dragStartObj.h * dirY;
+                        const vMouseX = u_mx - pivotX;
+                        const vMouseY = u_my - pivotY;
 
-                    const vDiagX = dragStartObj.w * dirX;
-                    const vDiagY = dragStartObj.h * dirY;
-                    const vMouseX = u_mx - pivotX;
-                    const vMouseY = u_my - pivotY;
+                        const dotProduct = (vMouseX * vDiagX) + (vMouseY * vDiagY);
+                        const diagLengthSq = (dragStartObj.w * dragStartObj.w) + (dragStartObj.h * dragStartObj.h);
+                        
+                        let scaleFactor = dotProduct / diagLengthSq;
 
-                    // Calculate scale based on the total diagonal mass of the shape
-                    const dotProduct = (vMouseX * vDiagX) + (vMouseY * vDiagY);
-                    const diagLengthSq = (dragStartObj.w * dragStartObj.w) + (dragStartObj.h * dragStartObj.h);
-                    
-                    let scaleFactor = dotProduct / diagLengthSq;
-
-                    // --- SPLIT LOGIC: Text keeps its original logic, SVG/Image use absolute pixel limits ---
-                    if (el.type === 'text') {
-                        // ORIGINAL WORKING TEXT LOGIC
-                        scaleFactor = Math.max(0.2, scaleFactor); // Limit scaling down to 20%
-                        const minScaleLimit = 8 / dragStartObj.fontSize;
-                        scaleFactor = Math.max(scaleFactor, minScaleLimit);
-                        el.fontSize = dragStartObj.fontSize * scaleFactor;
-                    } else {
-                        // NEW IMAGE/SVG DYNAMIC PIXEL LIMITS
-                        let minAllowedWidth = 20;
-                        let minAllowedHeight = 20;
-
-                        if (el.type === 'image') {
-                            minAllowedWidth = 50;  // Images stop shrinking at 50px
-                            minAllowedHeight = 50;
-                        } else if (el.type === 'svg') {
-                            minAllowedWidth = 25;  // SVGs/Icons stop shrinking at 25px
-                            minAllowedHeight = 25;
+                        if (el.type === 'text') {
+                            scaleFactor = Math.max(0.2, scaleFactor);
+                            const minScaleLimit = 8 / dragStartObj.fontSize;
+                            scaleFactor = Math.max(scaleFactor, minScaleLimit);
+                            el.fontSize = dragStartObj.fontSize * scaleFactor;
+                        } else {
+                            let minAllowedWidth = el.type === 'image' ? 50 : (el.type === 'svg' ? 25 : 20);
+                            let minAllowedHeight = el.type === 'image' ? 50 : (el.type === 'svg' ? 25 : 20);
+                            const minScaleLimit = Math.max(minAllowedWidth / dragStartObj.w, minAllowedHeight / dragStartObj.h);
+                            scaleFactor = Math.max(scaleFactor, minScaleLimit);
                         }
 
-                        // Calculate the scale factor required to hit those exact minimum pixel sizes
-                        const minScaleLimit = Math.max(minAllowedWidth / dragStartObj.w, minAllowedHeight / dragStartObj.h);
-                        scaleFactor = Math.max(scaleFactor, minScaleLimit);
-                    }
+                        w = dragStartObj.w * scaleFactor;
 
-                    w = dragStartObj.w * scaleFactor;
-
-                    if (el.type === 'text') {
-                        const node = document.getElementById('el-' + el.id);
-                        if (node) {
-                            const oldW = node.style.width;
-                            const oldF = node.style.fontSize;
-                            node.style.width = w + 'px';
-                            node.style.fontSize = el.fontSize + 'px';
-                            h = node.scrollHeight;
-                            node.style.width = oldW;
-                            node.style.fontSize = oldF;
+                        if (el.type === 'text') {
+                            const node = document.getElementById('el-' + el.id);
+                            if (node) {
+                                const oldW = node.style.width;
+                                const oldF = node.style.fontSize;
+                                node.style.width = w + 'px';
+                                node.style.fontSize = el.fontSize + 'px';
+                                h = node.scrollHeight;
+                                node.style.width = oldW;
+                                node.style.fontSize = oldF;
+                            }
+                        } else {
+                            h = dragStartObj.h * scaleFactor;
                         }
-                    } else {
-                        h = dragStartObj.h * scaleFactor;
-                    }
 
-                    if (dragMode.includes('w')) x = dragStartObj.x + dragStartObj.w - w;
-                    if (dragMode.includes('n')) y = dragStartObj.y + dragStartObj.h - h;
+                        if (dragMode.includes('w')) x = dragStartObj.x + dragStartObj.w - w;
+                        if (dragMode.includes('n')) y = dragStartObj.y + dragStartObj.h - h;
+                    } else {
+                        // --- FREE SCALING LOGIC FOR CORNERS ---
+                        const MIN_W = el.type === 'image' ? 50 : (el.type === 'svg' ? 25 : 20);
+                        const MIN_H = MIN_W;
+
+                        if (dragMode.includes('e')) w = Math.max(MIN_W, u_mx - dragStartObj.x);
+                        if (dragMode.includes('w')) {
+                            w = Math.max(MIN_W, dragStartObj.x + dragStartObj.w - u_mx);
+                            x = dragStartObj.x + dragStartObj.w - w;
+                        }
+                        if (dragMode.includes('s')) h = Math.max(MIN_H, u_my - dragStartObj.y);
+                        if (dragMode.includes('n')) {
+                            h = Math.max(MIN_H, dragStartObj.y + dragStartObj.h - u_my);
+                            y = dragStartObj.y + dragStartObj.h - h;
+                        }
+                    }
                 }
 
                 const ux = x + w / 2, uy = y + h / 2;
@@ -1415,6 +1532,7 @@
                 el.x = rx - w / 2; el.y = ry - h / 2; el.w = w; 
                 if (el.type !== 'text') el.h = h; 
             }
+            
             // --- 4. THE SAFE BOUNDARY CHECK ---
             // This runs AFTER all calculations, ensuring 30 pixels remain visible 
             // without breaking the scaling math or causing syntax errors.
@@ -1429,7 +1547,10 @@
         // ISSUE 3 FIX: Wait until mouseup to check if it was just a "click" and not a "drag"
         window.addEventListener('pointerup', (e) => { 
             if (dragMode) { 
-                if (dragMode === 'move') {
+
+                if (dragMode === 'move-all') {
+                    saveHistory(); // Save the group move
+                } else if (dragMode === 'move') {
                     const dx = Math.abs(e.clientX - window.__clickPos.x);
                     const dy = Math.abs(e.clientY - window.__clickPos.y);
                     
@@ -1451,7 +1572,18 @@
         
         function updatePanel() {
             const el = getSelectedElement();
-            document.getElementById('panel-empty').style.display = el ? 'none' : 'block';
+            const emptyPanel = document.getElementById('panel-empty');
+            
+            if (state.selectAllMode) {
+                emptyPanel.innerHTML = "<b>Multiple elements selected.</b><br><br>Drag the bounding box to move them, or press Delete to remove them.";
+                emptyPanel.style.display = 'block';
+                ['common', 'text', 'image', 'svg'].forEach(id => document.getElementById('panel-' + id).classList.remove('visible'));
+                return;
+            } else {
+                emptyPanel.innerHTML = "No element selected.<br><br>Click an element on the canvas to edit.";
+            }
+
+            emptyPanel.style.display = el ? 'none' : 'block';
             ['common', 'text', 'image', 'svg'].forEach(id => document.getElementById('panel-' + id).classList.remove('visible'));
             if (!el) return;
 
@@ -1464,6 +1596,9 @@
 
             const lockCb = document.getElementById('prop-lock');
             if (lockCb) lockCb.checked = !!el.locked;
+
+            const aspectLockCb = document.getElementById('prop-aspect-lock');
+            if (aspectLockCb) aspectLockCb.checked = !!el.aspectLocked;
 
             const panelControls = document.querySelectorAll('.properties-panel input, .properties-panel select, .properties-panel button');
             panelControls.forEach(ctrl => {
@@ -1531,9 +1666,24 @@
             if (el.type === 'image') {
                 setV('prop-imageradius', el.radius); setV('prop-brightness', el.filters.b); setV('prop-contrast', el.filters.c);
                 setV('prop-saturation', el.filters.s); setV('prop-blur', el.filters.bl);
+
+                // NEW: Shadow UI Updates
+                const shadow = el.shadow || { active: false, x: 5, y: 5, bl: 10, sp: 0, c: '#000000' };
+                document.getElementById('prop-shadow-active').checked = !!shadow.active;
+                document.getElementById('shadow-controls').style.display = shadow.active ? 'block' : 'none';
+                setV('prop-shadow-x', shadow.x || 0);
+                setV('prop-shadow-y', shadow.y || 0);
+                setV('prop-shadow-bl', shadow.bl || 0);
+                setV('prop-shadow-sp', shadow.sp || 0);
+                setV('prop-shadow-c', rgbToHex(shadow.c || '#000000'));
             }
 
             if (el.type === 'svg') {
+
+                // --- NEW: Populate Stroke Values ---
+                setV('prop-svgstrokewidth', el.strokeWidth || 0);
+                setV('prop-svgstroke', el.stroke ? rgbToHex(el.stroke) : '#000000');
+
                 const container = document.getElementById('svg-color-container');
                 container.innerHTML = ''; 
 
@@ -1631,7 +1781,44 @@
                 renderCanvas(); if (evt === 'change') saveHistory();
             }));
         }
-        bindProp('prop-x', 'x', null, true); bindProp('prop-y', 'y', null, true); bindProp('prop-w', 'w', null, true); bindProp('prop-h', 'h', null, true);
+        bindProp('prop-x', 'x', null, true); bindProp('prop-y', 'y', null, true);
+
+        // --- CUSTOM BINDING FOR W & H (Aspect Ratio Support) ---
+        ['prop-w', 'prop-h'].forEach(id => {
+            const node = document.getElementById(id); if (!node) return;
+            ['input', 'change'].forEach(evt => node.addEventListener(evt, e => {
+                const el = getSelectedElement(); if (!el) return;
+                const val = parseFloat(e.target.value);
+                if (isNaN(val)) return;
+                
+                const isW = id === 'prop-w';
+                const currentAspect = el.w / el.h;
+                
+                el[isW ? 'w' : 'h'] = val;
+                
+                if (el.aspectLocked) {
+                    if (isW) {
+                        el.h = val / currentAspect;
+                        document.getElementById('prop-h').value = Math.round(el.h);
+                    } else {
+                        el.w = val * currentAspect;
+                        document.getElementById('prop-w').value = Math.round(el.w);
+                    }
+                }
+                
+                renderCanvas(); if (evt === 'change') saveHistory();
+            }));
+        });
+
+        // Aspect Lock Toggle Event
+        document.getElementById('prop-aspect-lock').addEventListener('change', function(e) {
+            const el = getSelectedElement();
+            if (el) {
+                el.aspectLocked = e.target.checked;
+                saveHistory();
+                updatePanel();
+            }
+        });
         bindProp('prop-angle', 'angle', null, true); bindProp('prop-opacity', 'opacity', null, true);
         bindProp('prop-fontfamily', 'fontFamily');bindProp('prop-transform', 'textTransform');
         bindProp('prop-fontsize', 'fontSize', null, true); bindProp('prop-fontcolor', 'color'); bindProp('prop-lineheight', 'lineHeight', null, true);
@@ -1639,7 +1826,23 @@
         bindProp('prop-imageradius', 'radius', null, true); bindProp('prop-brightness', 'b', 'filters', true); bindProp('prop-contrast', 'c', 'filters', true);
         bindProp('prop-saturation', 's', 'filters', true); bindProp('prop-blur', 'bl', 'filters', true);
         bindProp('prop-svgfill', 'fill'); bindProp('prop-svgstroke', 'stroke');bindProp('prop-svgstrokewidth', 'strokeWidth', null, true);
+        // --- NEW: Image Shadow Data Bindings ---
+        bindProp('prop-shadow-x', 'x', 'shadow', true);
+        bindProp('prop-shadow-y', 'y', 'shadow', true);
+        bindProp('prop-shadow-bl', 'bl', 'shadow', true);
+        bindProp('prop-shadow-sp', 'sp', 'shadow', true);
+        bindProp('prop-shadow-c', 'c', 'shadow');
 
+        document.getElementById('prop-shadow-active').addEventListener('change', e => {
+            const el = getSelectedElement();
+            if (el && el.type === 'image') {
+                if (!el.shadow) el.shadow = { active: false, x: 5, y: 5, bl: 10, sp: 0, c: '#000000' };
+                el.shadow.active = e.target.checked;
+                renderCanvas();
+                saveHistory();
+                updatePanel();
+            }
+        });
         document.getElementById('prop-lock').addEventListener('change', function(e) {
             const el = getSelectedElement();
             if (el) {
@@ -1654,8 +1857,16 @@
         function setProp(key, val) { const el = getSelectedElement(); if (el) { el[key] = val; renderCanvas(); saveHistory(); } }
        
         function deleteSelected() { 
+            if (state.selectAllMode) {
+                // Delete everything EXCEPT locked elements
+                state.elements = state.elements.filter(e => e.locked); 
+                state.selectAllMode = false;
+                renderCanvas(); saveHistory(); updatePanel();
+                return;
+            }
+
             const el = getSelectedElement();
-            if (!el || el.locked) return; // NEW: Stop if locked
+            if (!el || el.locked) return; 
             
             if (state.selectedId) { 
                 state.elements = state.elements.filter(e => e.id !== state.selectedId); 
@@ -1664,65 +1875,152 @@
             } 
         }
 
-        // --- NEW: Universal Paste Function ---
+        // --- UPGRADED: Universal Bulk Paste Function ---
         function pasteClipboard(mouseX, mouseY) {
-            if (!clipboard) return;
-            const uid = crypto.randomUUID();
+            if (!clipboard || !Array.isArray(clipboard) || clipboard.length === 0) return;
             
-            // If pasted from right-click, center it on the mouse. Otherwise, offset slightly.
-            let pasteX = clipboard.x + 20;
-            let pasteY = clipboard.y + 20;
-            
+            // Calculate offsets if pasting via Right-Click
+            let offsetX = 20, offsetY = 20;
             if (mouseX !== undefined && mouseY !== undefined) {
-                pasteX = mouseX - (clipboard.w / 2);
-                pasteY = mouseY - (clipboard.h / 2);
+                // Find the bounding box center of the copied group
+                let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+                clipboard.forEach(c => {
+                    if (c.x < minX) minX = c.x;
+                    if (c.y < minY) minY = c.y;
+                    if (c.x + c.w > maxX) maxX = c.x + c.w;
+                    if (c.y + c.h > maxY) maxY = c.y + c.h;
+                });
+                const groupCenterX = minX + (maxX - minX) / 2;
+                const groupCenterY = minY + (maxY - minY) / 2;
+                
+                offsetX = mouseX - groupCenterX;
+                offsetY = mouseY - groupCenterY;
             }
 
-            state.elements.push({ ...clipboard, id: uid, x: pasteX, y: pasteY, zIndex: state.elements.length });
+            let lastUid = null;
             
-            // Update clipboard coordinates so next paste offsets further down
-            clipboard.x = pasteX;
-            clipboard.y = pasteY;
+            clipboard.forEach(el => {
+                const uid = crypto.randomUUID();
+                
+                // If keyboard paste, offset by 20. If mouse paste, align to cursor.
+                let pasteX = el.x + (mouseX !== undefined ? offsetX : 20);
+                let pasteY = el.y + (mouseY !== undefined ? offsetY : 20);
+
+                state.elements.push({ ...el, id: uid, x: pasteX, y: pasteY, zIndex: state.elements.length });
+                
+                // Update clipboard coordinates so next paste offsets further down
+                el.x = pasteX;
+                el.y = pasteY;
+                lastUid = uid;
+            });
             
-            selectElement(uid); 
+            // Select the item if it was a single paste, otherwise drop selection to show group
+            if (clipboard.length === 1) {
+                selectElement(lastUid); 
+            } else {
+                state.selectAllMode = false;
+                selectElement(null);
+            }
+            
             renderCanvas(); 
             saveHistory(); 
             updatePanel();
         }
-
         function duplicateSelected() {
+            if (state.selectAllMode) {
+                // Get all unlocked elements
+                const toDuplicate = state.elements.filter(e => !e.locked);
+                if (toDuplicate.length === 0) return;
+                
+                // Save to clipboard as an array
+                clipboard = JSON.parse(JSON.stringify(toDuplicate)); 
+                
+                // Paste copies immediately
+                clipboard.forEach(el => {
+                    const uid = crypto.randomUUID(); 
+                    state.elements.push({ ...el, id: uid, x: el.x + 20, y: el.y + 20, zIndex: state.elements.length });
+                    
+                    // Offset clipboard for the next potential paste
+                    el.x += 20; 
+                    el.y += 20;
+                });
+
+                state.selectAllMode = false;
+                selectElement(null);
+                
+                renderCanvas(); saveHistory(); updatePanel();
+                return;
+            }
+
+            // --- Single Element Logic ---
             const el = getSelectedElement();
             if (!el || el.locked) return;
             
-            // NEW: Duplicating also sets the clipboard so it can be pasted later!
-            clipboard = JSON.parse(JSON.stringify(el)); 
+            // Store as an array so pasteClipboard always processes a list
+            clipboard = [JSON.parse(JSON.stringify(el))]; 
             
             const uid = crypto.randomUUID(); 
-            state.elements.push({ ...clipboard, id: uid, x: el.x + 20, y: el.y + 20, zIndex: state.elements.length });
+            state.elements.push({ ...clipboard[0], id: uid, x: el.x + 20, y: el.y + 20, zIndex: state.elements.length });
             
-            clipboard.x = el.x + 20; 
-            clipboard.y = el.y + 20;
+            clipboard[0].x = el.x + 20; 
+            clipboard[0].y = el.y + 20;
             
             state.selectedId = uid; renderCanvas(); saveHistory(); updatePanel();
         }
-      
-        // Updated Keyboard Listener to use the new paste function and deep-copy
+
+        // --- UPDATED KEYBOARD SHORTCUTS ---
         window.addEventListener('keydown', e => {
+            // Do nothing if the user is typing in an input, textarea, or editing text
             if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.isContentEditable || state.editingId) return;
-            if (e.ctrlKey || e.metaKey) {
-                if (e.key.toLowerCase() === 'z') { e.preventDefault(); e.shiftKey ? redo() : undo(); }
-                if (e.key.toLowerCase() === 'y') { e.preventDefault(); redo(); }
-                if (e.key.toLowerCase() === 'c') { 
-                    e.preventDefault(); 
-                    const el = getSelectedElement();
-                    if (el && !el.locked) {
-                        clipboard = JSON.parse(JSON.stringify(el)); 
+
+            const isMod = e.ctrlKey || e.metaKey; // Support Windows Ctrl and Mac Cmd
+
+            if (isMod) {
+                const key = e.key.toLowerCase();
+
+                // Ctrl + A: Select All
+                if (key === 'a') {
+                  e.preventDefault();
+                    if (state.elements.length > 0) {
+                        state.selectAllMode = true;
+                        selectElement(null); // Clears the single selection
                     }
                 }
-                if (e.key.toLowerCase() === 'v' && clipboard) { e.preventDefault(); pasteClipboard(); }
+
+                // Ctrl + D: Duplicate
+                if (key === 'd') {
+                    e.preventDefault();
+                    duplicateSelected();
+                }
+
+                // Existing Shortcuts
+                if (key === 'z') { e.preventDefault(); e.shiftKey ? redo() : undo(); }
+                if (key === 'y') { e.preventDefault(); redo(); }
+               if (key === 'c') { 
+                    e.preventDefault(); 
+                    if (state.selectAllMode) {
+                        const toCopy = state.elements.filter(el => !el.locked);
+                        if (toCopy.length > 0) {
+                            clipboard = JSON.parse(JSON.stringify(toCopy));
+                        }
+                    } else {
+                        const el = getSelectedElement();
+                        if (el && !el.locked) {
+                            clipboard = [JSON.parse(JSON.stringify(el))]; // Wrap in array
+                        }
+                    }
+                }
+                if (key === 'v' && clipboard) { 
+                    e.preventDefault(); 
+                    pasteClipboard(); 
+                }
             } else { 
+                // Non-modifier keys
                 if (e.key === 'Delete' || e.key === 'Backspace') deleteSelected(); 
-                if (e.key === 'Escape') selectElement(null); 
+                if (e.key === 'Escape') { 
+                    state.selectAllMode = false; 
+                    selectElement(null); 
+                }
             }
         });
 
@@ -1763,7 +2061,7 @@
                 }
 
                 ctxMenu.innerHTML += `
-                    <div class="context-menu-item ${lockClass}" onclick="clipboard = JSON.parse(JSON.stringify(getSelectedElement())); hideContextMenu();">Copy</div>
+                    <div class="context-menu-item ${lockClass}" onclick="clipboard = [JSON.parse(JSON.stringify(getSelectedElement()))]; hideContextMenu();">Copy</div>
                     <div class="context-menu-separator"></div>
                     <div class="context-menu-item ${lockClass}" onclick="bringToFront(); hideContextMenu();">Bring to Front</div>
                     <div class="context-menu-item ${lockClass}" onclick="sendToBack(); hideContextMenu();">Send to Back</div>
@@ -2000,7 +2298,7 @@
                         x: state.canvasW / 2 - w / 2, // Perfect Center
                         y: state.canvasH / 2 - h / 2, // Perfect Center
                         w, h, angle: 0, opacity: 1, zIndex: state.elements.length, 
-                        radius: 0, filters: { b: 0, c: 0, s: 0, bl: 0 }, shadow: { c: '#000000', bl: 0, x: 0, y: 0 } 
+                        radius: 0, filters: { b: 0, c: 0, s: 0, bl: 0 }, shadow: { active: false, x: 5, y: 5, bl: 10, sp: 0, c: '#000000' }
                     };
                     
                     state.elements.push(el); 
@@ -2103,6 +2401,8 @@
                 el.content = e.target.result; 
                 el.originalContent = e.target.result; // Saves the new file as the baseline
                 el.fill = ''; // Resets any global HTML font colors
+                el.stroke = '';
+                el.strokeWidth = 0;
                 
                 renderCanvas(); 
                 saveHistory(); 
@@ -2587,354 +2887,354 @@
             document.getElementById('export-loader').style.display = 'none';
         }
 
-// --- 1. ROBUST IMAGE-TO-BASE64 CONVERTER ---
-async function fetchImageAsBase64(url) {
-    if (!url || url.startsWith('data:')) return url;
-    try {
-        // public proxy to bypass CORS
-        const proxyUrl = 'https://corsproxy.io/?' + encodeURIComponent(url);
-        const response = await fetch(proxyUrl);
-        if (!response.ok) throw new Error('CORS proxy failed');
-        const blob = await response.blob();
-        return new Promise((resolve, reject) => {
-            const reader = new FileReader();
-            reader.onloadend = () => resolve(reader.result);
-            reader.onerror = reject;
-            reader.readAsDataURL(blob);
-        });
-    } catch (e) {
-        console.warn("Proxy failed for:", url, e);
-        return url; // Fallback to original
-    }
-}
-
-// --- 2. FIXED EXPORT FUNCTION ---
-async function exportToImage(format) {
-    // A. Show a simple alert so the user knows it's working (it takes a few seconds)
-    console.log("Starting export...");
-    showLoading(`GENERATING ${format.toUpperCase()}...`);
-    
-    // B. Create a temporary "Clean Clone" of the flyer
-    const clone = canvasEl.cloneNode(true);
-    
-    // C. REMOVE UI: Find and delete the handles/overlays inside the clone
-    const overlay = clone.querySelector('#selection-overlay');
-    if (overlay) overlay.remove();
-
-
-   // --- SMART TEXT WRAP FIX FOR HTML2CANVAS ---
-    const canvasCtx = document.createElement('canvas').getContext('2d');
-    const textElements = clone.querySelectorAll('.canvas-element');
-    
-    textElements.forEach(el => {
-        const stateEl = state.elements.find(e => 'el-' + e.id === el.id);
-        if (stateEl && stateEl.type === 'text') {
-            const originalNode = document.getElementById(el.id);
-            if (!originalNode) return;
-
-            const computedStyle = window.getComputedStyle(originalNode);
-            const currentWidth = parseFloat(el.style.width);
-            const fontSize = parseFloat(computedStyle.fontSize);
-            const lineHeight = parseFloat(computedStyle.lineHeight) || (fontSize * 1.2);
-            
-            // 1. Wrap Strategy Detection
-            // Tighter threshold: A box must be practically 1-character wide to be vertical
-            const isVertical = currentWidth <= (fontSize * 1.8); 
-            // Relaxed threshold: Allows custom fonts with large padding to stay single-line
-            const isSingleLine = originalNode.scrollHeight <= (lineHeight * 1.5);
-
-            // 2. DYNAMIC BUFFER
-            // Horizontal text gets 8px to guarantee html2canvas never prematurely wraps words
-            const buffer = isVertical ? 0 : 8;
-            
-            el.style.lineHeight = computedStyle.lineHeight;
-            el.style.width = (currentWidth + buffer) + 'px';
-            el.style.minWidth = (currentWidth + buffer) + 'px';
-            el.style.maxWidth = (currentWidth + buffer) + 'px';
-
-            if (computedStyle.textAlign === 'center') {
-                el.style.left = (parseFloat(el.style.left) - (buffer / 2)) + 'px';
-            } else if (computedStyle.textAlign === 'right') {
-                el.style.left = (parseFloat(el.style.left) - buffer) + 'px';
+        // --- 1. ROBUST IMAGE-TO-BASE64 CONVERTER ---
+        async function fetchImageAsBase64(url) {
+            if (!url || url.startsWith('data:')) return url;
+            try {
+                // public proxy to bypass CORS
+                const proxyUrl = 'https://corsproxy.io/?' + encodeURIComponent(url);
+                const response = await fetch(proxyUrl);
+                if (!response.ok) throw new Error('CORS proxy failed');
+                const blob = await response.blob();
+                return new Promise((resolve, reject) => {
+                    const reader = new FileReader();
+                    reader.onloadend = () => resolve(reader.result);
+                    reader.onerror = reject;
+                    reader.readAsDataURL(blob);
+                });
+            } catch (e) {
+                console.warn("Proxy failed for:", url, e);
+                return url; // Fallback to original
             }
+        }
 
-            if (isSingleLine && !isVertical) {
-                // FIX: Lock Single Line text so it is physically impossible to wrap
-                el.style.whiteSpace = 'nowrap';
-                el.style.wordBreak = 'keep-all';
-                el.style.overflowWrap = 'normal'; 
-            } else {
-                // Multi-line & Vertical Stacked Text
-                el.style.whiteSpace = 'pre-wrap';
-                el.style.wordBreak = 'break-word';
-                el.style.overflowWrap = 'break-word'; 
-                
-                // Strip hidden leading newlines
-                el.innerHTML = el.innerHTML.replace(/^[\s\r\n]+/, '');
+        // --- 2. FIXED EXPORT FUNCTION ---
+        async function exportToImage(format) {
+            // A. Show a simple alert so the user knows it's working (it takes a few seconds)
+            console.log("Starting export...");
+            showLoading(`GENERATING ${format.toUpperCase()}...`);
+            
+            // B. Create a temporary "Clean Clone" of the flyer
+            const clone = canvasEl.cloneNode(true);
+            
+            // C. REMOVE UI: Find and delete the handles/overlays inside the clone
+            const overlay = clone.querySelector('#selection-overlay');
+            if (overlay) overlay.remove();
 
-                // 3. SEPARATED LOGIC: Smart Zero-Width Space Injector
-                canvasCtx.font = `${computedStyle.fontStyle} ${computedStyle.fontWeight} ${computedStyle.fontSize} ${computedStyle.fontFamily}`;
-                let letterSpacing = parseFloat(computedStyle.letterSpacing) || 0;
-                
-                const injectSmartZWS = (node) => {
-                    Array.from(node.childNodes).forEach(child => {
-                        if (child.nodeType === 3 && child.nodeValue) {
-                            const parts = child.nodeValue.split(/(\s+)/);
-                            let modified = false;
 
-                            const newParts = parts.map(part => {
-                                if (part.match(/^\s+$/)) return part;
+        // --- SMART TEXT WRAP FIX FOR HTML2CANVAS ---
+            const canvasCtx = document.createElement('canvas').getContext('2d');
+            const textElements = clone.querySelectorAll('.canvas-element');
+            
+            textElements.forEach(el => {
+                const stateEl = state.elements.find(e => 'el-' + e.id === el.id);
+                if (stateEl && stateEl.type === 'text') {
+                    const originalNode = document.getElementById(el.id);
+                    if (!originalNode) return;
 
-                                let measureText = part;
-                                if (stateEl.textTransform === 'uppercase') measureText = measureText.toUpperCase();
-                                if (stateEl.textTransform === 'lowercase') measureText = measureText.toLowerCase();
+                    const computedStyle = window.getComputedStyle(originalNode);
+                    const currentWidth = parseFloat(el.style.width);
+                    const fontSize = parseFloat(computedStyle.fontSize);
+                    const lineHeight = parseFloat(computedStyle.lineHeight) || (fontSize * 1.2);
+                    
+                    // 1. Wrap Strategy Detection
+                    // Tighter threshold: A box must be practically 1-character wide to be vertical
+                    const isVertical = currentWidth <= (fontSize * 1.8); 
+                    // Relaxed threshold: Allows custom fonts with large padding to stay single-line
+                    const isSingleLine = originalNode.scrollHeight <= (lineHeight * 1.5);
 
-                                const w = canvasCtx.measureText(measureText).width + (measureText.length * letterSpacing);
-                                
-                                if (isVertical) {
-                                    // Aggressive wrapping for vertical columns
-                                    if (w > currentWidth - 1) { 
-                                        modified = true;
-                                        return part.split('').join('\u200B');
+                    // 2. DYNAMIC BUFFER
+                    // Horizontal text gets 8px to guarantee html2canvas never prematurely wraps words
+                    const buffer = isVertical ? 0 : 1;
+                    
+                    el.style.lineHeight = computedStyle.lineHeight;
+                    el.style.width = (currentWidth + buffer) + 'px';
+                    el.style.minWidth = (currentWidth + buffer) + 'px';
+                    el.style.maxWidth = (currentWidth + buffer) + 'px';
+
+                    if (computedStyle.textAlign === 'center') {
+                        el.style.left = (parseFloat(el.style.left) - (buffer / 2)) + 'px';
+                    } else if (computedStyle.textAlign === 'right') {
+                        el.style.left = (parseFloat(el.style.left) - buffer) + 'px';
+                    }
+
+                    if (isSingleLine && !isVertical) {
+                        // FIX: Lock Single Line text so it is physically impossible to wrap
+                        el.style.whiteSpace = 'nowrap';
+                        el.style.wordBreak = 'keep-all';
+                        el.style.overflowWrap = 'normal'; 
+                    } else {
+                        // Multi-line & Vertical Stacked Text
+                        el.style.whiteSpace = 'pre-wrap';
+                        el.style.wordBreak = 'break-word';
+                        el.style.overflowWrap = 'break-word'; 
+                        
+                        // Strip hidden leading newlines
+                        el.innerHTML = el.innerHTML.replace(/^[\s\r\n]+/, '');
+
+                        // 3. SEPARATED LOGIC: Smart Zero-Width Space Injector
+                        canvasCtx.font = `${computedStyle.fontStyle} ${computedStyle.fontWeight} ${computedStyle.fontSize} ${computedStyle.fontFamily}`;
+                        let letterSpacing = parseFloat(computedStyle.letterSpacing) || 0;
+                        
+                        const injectSmartZWS = (node) => {
+                            Array.from(node.childNodes).forEach(child => {
+                                if (child.nodeType === 3 && child.nodeValue) {
+                                    const parts = child.nodeValue.split(/(\s+)/);
+                                    let modified = false;
+
+                                    const newParts = parts.map(part => {
+                                        if (part.match(/^\s+$/)) return part;
+
+                                        let measureText = part;
+                                        if (stateEl.textTransform === 'uppercase') measureText = measureText.toUpperCase();
+                                        if (stateEl.textTransform === 'lowercase') measureText = measureText.toLowerCase();
+
+                                        const w = canvasCtx.measureText(measureText).width + (measureText.length * letterSpacing);
+                                        
+                                        if (isVertical) {
+                                            // Aggressive wrapping for vertical columns
+                                            if (w > currentWidth - 1) { 
+                                                modified = true;
+                                                return part.split('').join('\u200B');
+                                            }
+                                        } else {
+                                            // SAFEGUARD: Only break massive strings (>10 chars) in horizontal text.
+                                            // Standard words ("HIRING", "SUNDAY") completely bypass the measurement 
+                                            // hack, preventing them from being corrupted!
+                                            if (part.length > 1 && w > (currentWidth + buffer)) {
+                                                modified = true;
+                                                return part.split('').join('\u200B');
+                                            }
+                                        }
+                                        return part; 
+                                    });
+
+                                    if (modified) {
+                                        child.nodeValue = newParts.join('');
                                     }
-                                } else {
-                                    // SAFEGUARD: Only break massive strings (>15 chars) in horizontal text.
-                                    // Standard words ("HIRING", "SUNDAY") completely bypass the measurement 
-                                    // hack, preventing them from being corrupted!
-                                    if (part.length > 15 && w > (currentWidth + buffer)) {
-                                        modified = true;
-                                        return part.split('').join('\u200B');
-                                    }
+                                } else if (child.nodeType === 1) { 
+                                    injectSmartZWS(child);
                                 }
-                                return part; 
                             });
-
-                            if (modified) {
-                                child.nodeValue = newParts.join('');
-                            }
-                        } else if (child.nodeType === 1) { 
-                            injectSmartZWS(child);
-                        }
-                    });
-                };
-                injectSmartZWS(el);
-            }
-        }
-    });
-    // --- END SMART TEXT FIX ---
-    
-
-    
-    
-    // D. REMOVE GRID: Ensure the clone has no background grid
-    clone.style.backgroundImage = 'none';
-    clone.style.backgroundColor = state.bgColor;
-    
-    // E. Fix Dimensions: Force the clone to be exactly the template size
-    clone.style.width = state.canvasW + 'px';
-    clone.style.height = state.canvasH + 'px';
-    clone.style.position = 'absolute';
-    clone.style.top = '-10000px'; // Hide it from the user's view
-    clone.style.left = '-10000px';
-    clone.style.transform = 'none'; // Reset any scaling
-    document.body.appendChild(clone);
-
-    // F. SWAP S3 IMAGES: Check both <img> tags and background-images
-    const allImgs = clone.querySelectorAll('img');
-    for (let img of allImgs) {
-        if (img.src.includes('amazonaws.com')) {
-            img.src = await fetchImageAsBase64(img.src);
-        }
-    }
-    
-    const allShapes = clone.querySelectorAll('.canvas-element');
-    for (let shape of allShapes) {
-        const bg = shape.style.backgroundImage;
-        if (bg && bg.includes('amazonaws.com')) {
-            const urlMatch = bg.match(/url\(["']?(.*?)["']?\)/);
-            if (urlMatch && urlMatch[1]) {
-                const b64 = await fetchImageAsBase64(urlMatch[1]);
-                shape.style.backgroundImage = `url("${b64}")`;
-            }
-        }
-    }
-
-    try {
-        // G. Wait for fonts to be ready so text doesn't move
-        await document.fonts.ready;
-        await new Promise(r => setTimeout(r, 300)); // Hard delay for repainting
-
-        const capture = await html2canvas(clone, {
-            scale: 2, 
-            useCORS: true,
-            allowTaint: false,
-            letterRendering:true,
-            backgroundColor: (state.bgColor === 'transparent' || !state.bgColor) ? '#ffffff' : state.bgColor,
-            width: state.canvasW,
-            height: state.canvasH,
-            scrollX: 0,
-            scrollY: 0,
-            logging: false
-        });
-
-        const mimeType = format === 'jpeg' ? 'image/jpeg' : 'image/png';
-        const fileExt = format === 'jpeg' ? 'jpg' : 'png';
-        
-        const a = document.createElement('a');
-        a.download = `flyer_export.${fileExt}`;
-        a.href = capture.toDataURL(mimeType, 1.0);
-        a.click();
-
-    } catch (err) {
-        console.error("Export Error:", err);
-        alert("Export failed. Check console for details.");
-    } finally {
-        // H. Cleanup the invisible clone
-        document.body.removeChild(clone);
-        hideLoading(); // Always hide spinner, even on error
-    }
-}
-
-async function exportToPDF() {
-    if (!window.jspdf) return alert("jsPDF missing");
-    showLoading("PREPARING PDF...");
-    
-    const clone = canvasEl.cloneNode(true);
-    const overlay = clone.querySelector('#selection-overlay');
-    if (overlay) overlay.remove();
-
-// --- SMART TEXT WRAP FIX FOR HTML2CANVAS ---
-    const canvasCtx = document.createElement('canvas').getContext('2d');
-    const textElements = clone.querySelectorAll('.canvas-element');
-    
-    textElements.forEach(el => {
-        const stateEl = state.elements.find(e => 'el-' + e.id === el.id);
-        if (stateEl && stateEl.type === 'text') {
-            const originalNode = document.getElementById(el.id);
-            if (!originalNode) return;
-
-            const computedStyle = window.getComputedStyle(originalNode);
-            const currentWidth = parseFloat(el.style.width);
-            const fontSize = parseFloat(computedStyle.fontSize);
-            const lineHeight = parseFloat(computedStyle.lineHeight) || (fontSize * 1.2);
+                        };
+                        injectSmartZWS(el);
+                    }
+                }
+            });
+            // --- END SMART TEXT FIX ---
             
-            // 1. Wrap Strategy Detection
-            // Tighter threshold: A box must be practically 1-character wide to be vertical
-            const isVertical = currentWidth <= (fontSize * 1.8); 
-            // Relaxed threshold: Allows custom fonts with large padding to stay single-line
-            const isSingleLine = originalNode.scrollHeight <= (lineHeight * 1.5);
 
-            // 2. DYNAMIC BUFFER
-            // Horizontal text gets 8px to guarantee html2canvas never prematurely wraps words
-            const buffer = isVertical ? 0 : 8;
             
-            el.style.lineHeight = computedStyle.lineHeight;
-            el.style.width = (currentWidth + buffer) + 'px';
-            el.style.minWidth = (currentWidth + buffer) + 'px';
-            el.style.maxWidth = (currentWidth + buffer) + 'px';
+            
+            // D. REMOVE GRID: Ensure the clone has no background grid
+            clone.style.backgroundImage = 'none';
+            clone.style.backgroundColor = state.bgColor;
+            
+            // E. Fix Dimensions: Force the clone to be exactly the template size
+            clone.style.width = state.canvasW + 'px';
+            clone.style.height = state.canvasH + 'px';
+            clone.style.position = 'absolute';
+            clone.style.top = '-10000px'; // Hide it from the user's view
+            clone.style.left = '-10000px';
+            clone.style.transform = 'none'; // Reset any scaling
+            document.body.appendChild(clone);
 
-            if (computedStyle.textAlign === 'center') {
-                el.style.left = (parseFloat(el.style.left) - (buffer / 2)) + 'px';
-            } else if (computedStyle.textAlign === 'right') {
-                el.style.left = (parseFloat(el.style.left) - buffer) + 'px';
+            // F. SWAP S3 IMAGES: Check both <img> tags and background-images
+            const allImgs = clone.querySelectorAll('img');
+            for (let img of allImgs) {
+                if (img.src.includes('amazonaws.com')) {
+                    img.src = await fetchImageAsBase64(img.src);
+                }
+            }
+            
+            const allShapes = clone.querySelectorAll('.canvas-element');
+            for (let shape of allShapes) {
+                const bg = shape.style.backgroundImage;
+                if (bg && bg.includes('amazonaws.com')) {
+                    const urlMatch = bg.match(/url\(["']?(.*?)["']?\)/);
+                    if (urlMatch && urlMatch[1]) {
+                        const b64 = await fetchImageAsBase64(urlMatch[1]);
+                        shape.style.backgroundImage = `url("${b64}")`;
+                    }
+                }
             }
 
-            if (isSingleLine && !isVertical) {
-                // FIX: Lock Single Line text so it is physically impossible to wrap
-                el.style.whiteSpace = 'nowrap';
-                el.style.wordBreak = 'keep-all';
-                el.style.overflowWrap = 'normal'; 
-            } else {
-                // Multi-line & Vertical Stacked Text
-                el.style.whiteSpace = 'pre-wrap';
-                el.style.wordBreak = 'break-word';
-                el.style.overflowWrap = 'break-word'; 
+            try {
+                // G. Wait for fonts to be ready so text doesn't move
+                await document.fonts.ready;
+                await new Promise(r => setTimeout(r, 300)); // Hard delay for repainting
+
+                const capture = await html2canvas(clone, {
+                    scale: 2, 
+                    useCORS: true,
+                    allowTaint: false,
+                    letterRendering:true,
+                    backgroundColor: (state.bgColor === 'transparent' || !state.bgColor) ? '#ffffff' : state.bgColor,
+                    width: state.canvasW,
+                    height: state.canvasH,
+                    scrollX: 0,
+                    scrollY: 0,
+                    logging: false
+                });
+
+                const mimeType = format === 'jpeg' ? 'image/jpeg' : 'image/png';
+                const fileExt = format === 'jpeg' ? 'jpg' : 'png';
                 
-                // Strip hidden leading newlines
-                el.innerHTML = el.innerHTML.replace(/^[\s\r\n]+/, '');
+                const a = document.createElement('a');
+                a.download = `flyer_export.${fileExt}`;
+                a.href = capture.toDataURL(mimeType, 1.0);
+                a.click();
 
-                // 3. SEPARATED LOGIC: Smart Zero-Width Space Injector
-                canvasCtx.font = `${computedStyle.fontStyle} ${computedStyle.fontWeight} ${computedStyle.fontSize} ${computedStyle.fontFamily}`;
-                let letterSpacing = parseFloat(computedStyle.letterSpacing) || 0;
-                
-                const injectSmartZWS = (node) => {
-                    Array.from(node.childNodes).forEach(child => {
-                        if (child.nodeType === 3 && child.nodeValue) {
-                            const parts = child.nodeValue.split(/(\s+)/);
-                            let modified = false;
+            } catch (err) {
+                console.error("Export Error:", err);
+                alert("Export failed. Check console for details.");
+            } finally {
+                // H. Cleanup the invisible clone
+                document.body.removeChild(clone);
+                hideLoading(); // Always hide spinner, even on error
+            }
+        }
 
-                            const newParts = parts.map(part => {
-                                if (part.match(/^\s+$/)) return part;
+        async function exportToPDF() {
+            if (!window.jspdf) return alert("jsPDF missing");
+            showLoading("PREPARING PDF...");
+            
+            const clone = canvasEl.cloneNode(true);
+            const overlay = clone.querySelector('#selection-overlay');
+            if (overlay) overlay.remove();
 
-                                let measureText = part;
-                                if (stateEl.textTransform === 'uppercase') measureText = measureText.toUpperCase();
-                                if (stateEl.textTransform === 'lowercase') measureText = measureText.toLowerCase();
+        // --- SMART TEXT WRAP FIX FOR HTML2CANVAS ---
+            const canvasCtx = document.createElement('canvas').getContext('2d');
+            const textElements = clone.querySelectorAll('.canvas-element');
+            
+            textElements.forEach(el => {
+                const stateEl = state.elements.find(e => 'el-' + e.id === el.id);
+                if (stateEl && stateEl.type === 'text') {
+                    const originalNode = document.getElementById(el.id);
+                    if (!originalNode) return;
 
-                                const w = canvasCtx.measureText(measureText).width + (measureText.length * letterSpacing);
-                                
-                                if (isVertical) {
-                                    // Aggressive wrapping for vertical columns
-                                    if (w > currentWidth - 1) { 
-                                        modified = true;
-                                        return part.split('').join('\u200B');
+                    const computedStyle = window.getComputedStyle(originalNode);
+                    const currentWidth = parseFloat(el.style.width);
+                    const fontSize = parseFloat(computedStyle.fontSize);
+                    const lineHeight = parseFloat(computedStyle.lineHeight) || (fontSize * 1.2);
+                    
+                    // 1. Wrap Strategy Detection
+                    // Tighter threshold: A box must be practically 1-character wide to be vertical
+                    const isVertical = currentWidth <= (fontSize * 1.8); 
+                    // Relaxed threshold: Allows custom fonts with large padding to stay single-line
+                    const isSingleLine = originalNode.scrollHeight <= (lineHeight * 1.5);
+
+                    // 2. DYNAMIC BUFFER
+                    // Horizontal text gets 8px to guarantee html2canvas never prematurely wraps words
+                    const buffer = isVertical ? 0 : 1;
+                    
+                    el.style.lineHeight = computedStyle.lineHeight;
+                    el.style.width = (currentWidth + buffer) + 'px';
+                    el.style.minWidth = (currentWidth + buffer) + 'px';
+                    el.style.maxWidth = (currentWidth + buffer) + 'px';
+
+                    if (computedStyle.textAlign === 'center') {
+                        el.style.left = (parseFloat(el.style.left) - (buffer / 2)) + 'px';
+                    } else if (computedStyle.textAlign === 'right') {
+                        el.style.left = (parseFloat(el.style.left) - buffer) + 'px';
+                    }
+
+                    if (isSingleLine && !isVertical) {
+                        // FIX: Lock Single Line text so it is physically impossible to wrap
+                        el.style.whiteSpace = 'nowrap';
+                        el.style.wordBreak = 'keep-all';
+                        el.style.overflowWrap = 'normal'; 
+                    } else {
+                        // Multi-line & Vertical Stacked Text
+                        el.style.whiteSpace = 'pre-wrap';
+                        el.style.wordBreak = 'break-word';
+                        el.style.overflowWrap = 'break-word'; 
+                        
+                        // Strip hidden leading newlines
+                        el.innerHTML = el.innerHTML.replace(/^[\s\r\n]+/, '');
+
+                        // 3. SEPARATED LOGIC: Smart Zero-Width Space Injector
+                        canvasCtx.font = `${computedStyle.fontStyle} ${computedStyle.fontWeight} ${computedStyle.fontSize} ${computedStyle.fontFamily}`;
+                        let letterSpacing = parseFloat(computedStyle.letterSpacing) || 0;
+                        
+                        const injectSmartZWS = (node) => {
+                            Array.from(node.childNodes).forEach(child => {
+                                if (child.nodeType === 3 && child.nodeValue) {
+                                    const parts = child.nodeValue.split(/(\s+)/);
+                                    let modified = false;
+
+                                    const newParts = parts.map(part => {
+                                        if (part.match(/^\s+$/)) return part;
+
+                                        let measureText = part;
+                                        if (stateEl.textTransform === 'uppercase') measureText = measureText.toUpperCase();
+                                        if (stateEl.textTransform === 'lowercase') measureText = measureText.toLowerCase();
+
+                                        const w = canvasCtx.measureText(measureText).width + (measureText.length * letterSpacing);
+                                        
+                                        if (isVertical) {
+                                            // Aggressive wrapping for vertical columns
+                                            if (w > currentWidth - 1) { 
+                                                modified = true;
+                                                return part.split('').join('\u200B');
+                                            }
+                                        } else {
+                                            // SAFEGUARD: Only break massive strings (>15 chars) in horizontal text.
+                                            // Standard words ("HIRING", "SUNDAY") completely bypass the measurement 
+                                            // hack, preventing them from being corrupted!
+                                            if (part.length > 1 && w > (currentWidth + buffer)) {
+                                                modified = true;
+                                                return part.split('').join('\u200B');
+                                            }
+                                        }
+                                        return part; 
+                                    });
+
+                                    if (modified) {
+                                        child.nodeValue = newParts.join('');
                                     }
-                                } else {
-                                    // SAFEGUARD: Only break massive strings (>15 chars) in horizontal text.
-                                    // Standard words ("HIRING", "SUNDAY") completely bypass the measurement 
-                                    // hack, preventing them from being corrupted!
-                                    if (part.length > 15 && w > (currentWidth + buffer)) {
-                                        modified = true;
-                                        return part.split('').join('\u200B');
-                                    }
+                                } else if (child.nodeType === 1) { 
+                                    injectSmartZWS(child);
                                 }
-                                return part; 
                             });
+                        };
+                        injectSmartZWS(el);
+                    }
+                }
+            });
+            // --- END SMART TEXT FIX --- 
 
-                            if (modified) {
-                                child.nodeValue = newParts.join('');
-                            }
-                        } else if (child.nodeType === 1) { 
-                            injectSmartZWS(child);
-                        }
-                    });
-                };
-                injectSmartZWS(el);
+            clone.style.backgroundImage = 'none';
+            clone.style.width = state.canvasW + 'px';
+            clone.style.height = state.canvasH + 'px';
+            clone.style.position = 'absolute';
+            clone.style.top = '-10000px';
+            document.body.appendChild(clone);
+
+            try {
+                await document.fonts.ready;
+                const capture = await html2canvas(clone, {
+                    scale: 2, // Higher quality for PDF printing
+                    useCORS: true,
+                    width: state.canvasW,
+                    height: state.canvasH
+                });
+
+                const { jsPDF } = window.jspdf;
+                const orientation = state.canvasW > state.canvasH ? 'landscape' : 'portrait';
+                const pdf = new jsPDF({
+                    orientation: orientation,
+                    unit: 'px',
+                    format: [state.canvasW, state.canvasH]
+                });
+
+                pdf.addImage(capture.toDataURL('image/jpeg', 1.0), 'JPEG', 0, 0, state.canvasW, state.canvasH);
+                pdf.save('flyer_export.pdf');
+            } finally {
+                document.body.removeChild(clone);
+                hideLoading(); // Always hide spinner
             }
         }
-    });
-    // --- END SMART TEXT FIX --- 
-
-    clone.style.backgroundImage = 'none';
-    clone.style.width = state.canvasW + 'px';
-    clone.style.height = state.canvasH + 'px';
-    clone.style.position = 'absolute';
-    clone.style.top = '-10000px';
-    document.body.appendChild(clone);
-
-    try {
-        await document.fonts.ready;
-        const capture = await html2canvas(clone, {
-            scale: 2, // Higher quality for PDF printing
-            useCORS: true,
-            width: state.canvasW,
-            height: state.canvasH
-        });
-
-        const { jsPDF } = window.jspdf;
-        const orientation = state.canvasW > state.canvasH ? 'landscape' : 'portrait';
-        const pdf = new jsPDF({
-            orientation: orientation,
-            unit: 'px',
-            format: [state.canvasW, state.canvasH]
-        });
-
-        pdf.addImage(capture.toDataURL('image/jpeg', 1.0), 'JPEG', 0, 0, state.canvasW, state.canvasH);
-        pdf.save('flyer_export.pdf');
-    } finally {
-        document.body.removeChild(clone);
-        hideLoading(); // Always hide spinner
-    }
-}
         
         window.addEventListener('load', autoFitMobile);
         
